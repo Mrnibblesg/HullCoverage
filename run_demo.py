@@ -1,4 +1,5 @@
-import pygame, pymunk
+import pygame
+import pymunk
 import pymunk.pygame_util
 
 import robot
@@ -8,7 +9,6 @@ screen = pygame.display.set_mode((600, 600))
 clock = pygame.time.Clock()
 
 space = pymunk.Space()
-space.gravity = (0, 900)
 draw_options = pymunk.pygame_util.DrawOptions(screen)
 
 # create a ball
@@ -26,4 +26,3 @@ while running:
     space.step(1/60)
     pygame.display.flip()
     clock.tick(60)
-
