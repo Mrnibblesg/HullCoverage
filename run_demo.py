@@ -4,25 +4,84 @@ import pymunk.pygame_util
 
 import robot
 
-pygame.init()
-screen = pygame.display.set_mode((600, 600))
-clock = pygame.time.Clock()
+HEADLESS = False
 
-space = pymunk.Space()
-draw_options = pymunk.pygame_util.DrawOptions(screen)
+RUN_TIME = 15 # Seconds
+FRAME_RATE = 60 # FPS
 
-# create a ball
-r = robot.Robot()
-space.add(r.body, r.shape)
+SURFACE_RESOLUTION = 3 # pixels
+GRID_DIMS = (250, 250) # grid squares
 
-running = True
-while running:
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
+PADDING = 25
+WINDOW_DIMS = (min(GRID_DIMS[0] * SURFACE_RESOLUTION + 2 * PADDING, 1920),
+               min(GRID_DIMS[1] * SURFACE_RESOLUTION + 2 * PADDING, 1080))
+
+robots = []
+
+# The real representation of the surface. Squares are True if covered, False otherwise.
+# Currently the same as the internal representation. Should be changed to be more representative
+# of the real world probably...
+# We should really get a handle on how we want to represent our environments better.
+grid = [[False] * GRID_DIMS[0]] * GRID_DIMS[1]
+
+screen = None
+clock = None
+space = None
+draw_options = None
+
+def init():
+    global screen
+    global clock
+    global space
+    global draw_options
+    global robots
+    pygame.init()
+    screen = pygame.display.set_mode(WINDOW_DIMS)
+    clock = pygame.time.Clock()
+    space = pymunk.Space()
+
+    draw_options = pymunk.pygame_util.DrawOptions(screen)
+
+    r = robot.Robot()
+    robots.append(r)
+    space.add(r.body, r.shape)
+    loop()
+
+def loop():
+    time = 0
+    running = True
+    while running:
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+        if not HEADLESS:
+            draw()
+        for r in robots:
+            r.body.apply_force_at_local_point((10, 10))
+        space.step(1/FRAME_RATE)
+        pygame.display.flip()
+        clock.tick(FRAME_RATE)
+        time = time + clock.get_time()
+        if time >= RUN_TIME * 1000:
             running = False
+    end()
 
+def draw():
     screen.fill((255, 255, 255))
+    line_color = pygame.Color(200, 200, 200)
+    pygame.draw.rect(screen, "black",
+                     pygame.Rect(PADDING, PADDING,
+                          SURFACE_RESOLUTION * GRID_DIMS[0],
+                          SURFACE_RESOLUTION * GRID_DIMS[1]),
+                     1)
     space.debug_draw(draw_options)
-    space.step(1/60)
-    pygame.display.flip()
-    clock.tick(60)
+
+def end():
+    # TODO Record statistics.
+    print("The sim is finished.")
+
+
+if __name__ == "__main__":
+    HEADLESS = False
+    init()
