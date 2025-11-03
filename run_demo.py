@@ -50,7 +50,7 @@ def init():
 
     draw_options = pymunk.pygame_util.DrawOptions(screen)
 
-    r = robot.Robot()
+    r = robot.Robot((350,50))
     robots.append(r)
     space.add(r.body, r.shape)
     loop()

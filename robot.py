@@ -3,8 +3,9 @@
 # since we're only really worried about collisions with the boundary
 # and with other robots. We don't need a whole physics solver.
 import pymunk
-from math import pi
-from surface import PARAMS
+from pymunk.vec2d import Vec2d
+import math
+from params import PARAMS
 
 # Each robot has:
 #   itself...
@@ -25,12 +26,12 @@ from surface import PARAMS
 
 
 class Robot:
-    def __init__(self):
+    radius = 1  # meters
+
+    def __init__(self, position):
         self.body = pymunk.Body(5, pymunk.moment_for_circle(1, 0, 30))
-        self.body.position = (300, 50)
+        self.body.position = position
         self.shape = pymunk.Circle(self.body, 30)
-        self.max_speed = 2
-        self.turn_speed = 0.5
 
         self.baro = Barometer(self)
         self.IMU = IMU(self)
@@ -46,19 +47,34 @@ class Robot:
     def tick(self):
         self.planner()  # Set target parameters and control signals
         self.communicate()
-        self.move()  # Apply forces
+        self.move()  # Apply forces from motors
 
     def planner(self):
         print('Update coverage map')
-        self.internal_model.move()
+        self.internal_model.update()
 
         print('check for neighbors to exchange info')
 
-        self.motor.angle_controller(pi)
-        self.motor.velo_controller(0)
+        # Change motor signals
+        self.motor.angle_controller(self.IMU.psi, math.pi)
+        self.motor.velo_controller(0, 0)
 
     def communicate(self):
         print("search for nearby bots")
+
+    def move(self):
+        # linear and angular
+        # Apply force at center
+        direction = self.body.angle
+        force_vec = Vec2d(math.cos(direction), math.sin(direction))
+
+        self.body.apply_force_at_local_point(force_vec * self.motor.forward,
+                                             (0, 0))
+
+        # Angular: apply force perpendicular 1m away from center
+        perp_offset = force_vec.perpendicular_normal()
+        self.body.apply_force_at_local_point(force_vec * self.motor.rotation,
+                                             perp_offset * PARAMS.PX_PER_M)
 
 
 # Base class for anything that is a sensor and can measure noise
@@ -67,7 +83,7 @@ class Sensor:
     body = None
 
     def __init__(self, owner):
-        self.body = owner
+        self.owner = owner
 
 
 # In charge of the forces driving the robot, directly intertwined with the PIDs
@@ -83,20 +99,21 @@ class Motor(Sensor):
 
     # Not a full PID yet
     # apply the full power to get the values to the goal
-    def angle_controller(self, goal):
+    def angle_controller(self, current, goal):
         self.rotation = 0  # TODO remove this patchwork when implementing PID
-        diff = goal - self.owner.IMU.psi
+        diff = goal - current
         if (diff > 0):
             self.rotation = self.max_power
         else:
             self.rotation = -self.max_power
 
-    def velo_controller(self, goal):
+    def velo_controller(self, current, goal):
         print("control velocity")
 
 
 # How to simulate the barometer?
 # We can assume it's pretty accurate, with minimal amounts of noise in pressure
+# Needs time diff between last tick and velocity diff from last tick
 class Barometer(Sensor):
     def __init__(self, owner):
         super().__init__(owner)
@@ -140,13 +157,13 @@ class InternalModel:
     resolution = 0.1
     grid_width = int(PARAMS.SURFACE_DIMS_M[0] / resolution)
     grid_height = int(PARAMS.SURFACE_DIMS_M[1] / resolution)
-
+    space = None
     # The robot is pre-loaded with the shape of its environment
     # so it can model its cleaned area.
-    space = [[False] * grid_width] * grid_height
 
     def __init__(self):
         self.color = "red"
+        space = [[False] * self.grid_width for x in range(self.grid_height)]
 
     def merge(model):
         print("Merge data models here")
@@ -154,5 +171,5 @@ class InternalModel:
     # Tick the robot's position and update the internal model with new
     # spots cleaned.
 
-    def move(self):
+    def update(self):
         print("Moving")
