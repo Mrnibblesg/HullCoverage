@@ -29,9 +29,11 @@ class Robot:
     radius = 1  # meters
 
     def __init__(self, position):
-        self.body = pymunk.Body(5, pymunk.moment_for_circle(1, 0, 30))
-        self.body.position = position
-        self.shape = pymunk.Circle(self.body, 30)
+        self.body = pymunk.Body(5, pymunk.moment_for_circle(
+            1, 0, self.radius))
+
+        self.body.position = position * PARAMS.PX_PER_M
+        self.shape = pymunk.Circle(self.body, self.radius * PARAMS.PX_PER_M)
 
         self.baro = Barometer(self)
         self.IMU = IMU(self)
@@ -45,6 +47,7 @@ class Robot:
     # of path finding algorithm
 
     def tick(self):
+        print("Position: ", self.body.position)
         self.planner()  # Set target parameters and control signals
         self.communicate()
         self.move()  # Apply forces from motors
@@ -71,10 +74,14 @@ class Robot:
         self.body.apply_force_at_local_point(force_vec * self.motor.forward,
                                              (0, 0))
 
-        # Angular: apply force perpendicular 1m away from center
+        # Angular: apply equal and opposite forces
+        # perpendicular to the center of the circle
+        # TODO Alternatively, set the torque
         perp_offset = force_vec.perpendicular_normal()
         self.body.apply_force_at_local_point(force_vec * self.motor.rotation,
-                                             perp_offset * PARAMS.PX_PER_M)
+                                             perp_offset / PARAMS.PX_PER_M)
+        self.body.apply_force_at_local_point(-force_vec * self.motor.rotation,
+                                             -perp_offset / PARAMS.PX_PER_M)
 
 
 # Base class for anything that is a sensor and can measure noise
