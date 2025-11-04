@@ -7,26 +7,13 @@ from pymunk.vec2d import Vec2d
 import math
 from params import PARAMS
 
-# Each robot has:
-#   itself...
-#       - pose
-#   - an internal model of its environment
-#   - sensors telling it where it is and how it's moving
-#       - IMU
-#       - barometer
-#       - timer
-# Each robot can:
-#   - move to a specified goal based on its sensors and dead reckoning
-#   - Keep track of where it's been
-#   - Communicate with robots nearby,
-#       exchanging info about what has been covered already.
-
 # Simulation details:
 # We'll have sensor noise be a toggle and start without sensor noise.
 
 
 class Robot:
     radius = 1  # meters
+    world = None
 
     def __init__(self, position):
         self.body = pymunk.Body(5, pymunk.moment_for_circle(
@@ -66,22 +53,21 @@ class Robot:
         print("search for nearby bots")
 
     def move(self):
-        # linear and angular
-        # Apply force at center
         direction = self.body.angle
         force_vec = Vec2d(math.cos(direction), math.sin(direction))
 
         self.body.apply_force_at_local_point(force_vec * self.motor.forward,
                                              (0, 0))
 
-        # Angular: apply equal and opposite forces
-        # perpendicular to the center of the circle
         # TODO Alternatively, set the torque
         perp_offset = force_vec.perpendicular_normal()
         self.body.apply_force_at_local_point(force_vec * self.motor.rotation,
                                              perp_offset / PARAMS.PX_PER_M)
         self.body.apply_force_at_local_point(-force_vec * self.motor.rotation,
                                              -perp_offset / PARAMS.PX_PER_M)
+
+        # TODO After our forces are applied, our sensors react to the changes.
+        self.IMU.react()
 
 
 # Base class for anything that is a sensor and can measure noise
@@ -107,8 +93,11 @@ class Motor(Sensor):
     # Not a full PID yet
     # apply the full power to get the values to the goal
     def angle_controller(self, current, goal):
+        # print("Current: ", current)
+        # print("Goal: ", goal)
         self.rotation = 0  # TODO remove this patchwork when implementing PID
         diff = goal - current
+        # print(diff)
         if (diff > 0):
             self.rotation = self.max_power
         else:
@@ -120,7 +109,6 @@ class Motor(Sensor):
 
 # How to simulate the barometer?
 # We can assume it's pretty accurate, with minimal amounts of noise in pressure
-# Needs time diff between last tick and velocity diff from last tick
 class Barometer(Sensor):
     def __init__(self, owner):
         super().__init__(owner)
@@ -131,9 +119,13 @@ class Barometer(Sensor):
 
 
 # Detects current acceleration (3-axis accelerometer/gyroscope)
-# could you measure water flow for a more accurate reading of velocity?
-# Better to use quaternions for this but it's euler angles for now
+# TODO could you measure water flow for a more accurate reading of velocity?
+# TODO Better to use quaternions for this but it's euler angles for now
 class IMU(Sensor):
+    last_psi = 0
+    last_d_psi = 0
+    last_measurement = -1
+
     def __init__(self, owner):
         super().__init__(owner)
         # AKA roll, pitch, yaw
@@ -141,8 +133,15 @@ class IMU(Sensor):
         self.theta = 0
         self.psi = 0  # The only one useful for a flat surface
 
-    def measure(self):
-        print("IMU measurement of yaw")
+    # Detect changes in acceleration.
+    # Needs time diff between last tick and velocity diff from last tick
+    def react(self):
+        # This is the sensor reacting to change.
+        d_psi = self.owner.body.angular_velocity
+
+        # accel_psi = (d_psi - self.last_d_psi) / (
+        #        Robot.world.clock.get_time() - self.last_measurement)
+        self.last_measurement = Robot.world.clock.get_time()
 
 
 # Contains the internal model, basically the bot knowing where it has been
