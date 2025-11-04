@@ -7,9 +7,6 @@ from pymunk.vec2d import Vec2d
 import math
 from params import PARAMS
 
-# Simulation details:
-# We'll have sensor noise be a toggle and start without sensor noise.
-
 
 class Robot:
     radius = 1  # meters
@@ -25,7 +22,7 @@ class Robot:
         self.baro = Barometer(self)
         self.IMU = IMU(self)
         self.motor = Motor(self)
-        self.internal_model = InternalModel()
+        self.internal_model = InternalModel(self.body.position)
 
     # The job of the planner is to decide the next
     # goals of the robot. The ultimate goal is full coverage.
@@ -50,7 +47,7 @@ class Robot:
         self.motor.velo_controller(0, 0)
 
     def communicate(self):
-        print("search for nearby bots")
+        pass
 
     def move(self):
         direction = self.body.angle
@@ -185,32 +182,32 @@ class IMU(Sensor):
 #       A graph of them would work better, especially for a
 #       surface with both concave and convex regions. Though, Alli said that
 #       there was a different approach that was better
-
 class InternalModel:
     # Defines the size of an internal model square, in m.
     resolution = 0.1
     grid_width = int(PARAMS.SURFACE_DIMS_M[0] / resolution)
     grid_height = int(PARAMS.SURFACE_DIMS_M[1] / resolution)
-    space = None
 
     # The robot is pre-loaded with the shape of its environment
     # so it can model its cleaned area.
 
-    def __init__(self):
+    def __init__(self, position):
         # AKA roll, pitch, yaw
-        self.phi = 0
-        self.theta = 0
-        self.psi = 0  # The only one useful for a flat surface
+        self.phi_pred = 0
+        self.theta_pred = 0
+        self.psi_pred = 0  # The only one useful for a flat surface
 
+        # Start out with knowledge. Predict the rest
+        self.x_pred = position[0]
+        self.y_pred = position[1]
 
         self.color = "red"
-        space = [[False] * self.grid_width for x in range(self.grid_height)]
+        self.space = [[False] * self.grid_width for x in range(self.grid_height)]
+
+    # Tick the robot's predicted position and update the internal model with new
+    # spots cleaned.
+    def update(self):
+        print("Moving")
 
     def merge(model):
         print("Merge data models here")
-
-    # Tick the robot's position and update the internal model with new
-    # spots cleaned.
-
-    def update(self):
-        print("Moving")
