@@ -103,8 +103,7 @@ class Motor(Sensor):
             self.rotation = -self.max_power
 
     def velo_controller(self, current, goal):
-        print("control velocity")
-
+        self.forward = self.max_power
 
 # How to simulate the barometer?
 # We can assume it's pretty accurate, with minimal amounts of noise in pressure
@@ -121,26 +120,56 @@ class Barometer(Sensor):
 # TODO could you measure water flow for a more accurate reading of velocity?
 # TODO Better to use quaternions for this but it's euler angles for now
 class IMU(Sensor):
-    last_psi = 0
-    last_d_psi = 0
-    last_measurement = -1
-
     def __init__(self, owner):
         super().__init__(owner)
-        # AKA roll, pitch, yaw
-        self.phi = 0
-        self.theta = 0
-        self.psi = 0  # The only one useful for a flat surface
+        self.last_measurement = 0
+        self.last_d_psi = 0
+        self.last_d_forward = 0
+        self.last_d_lateral = 0
 
-    # Detect changes in acceleration.
+        self.a_psi
+        self.a_forward = 0
+        self.a_lateral = 0
+
+    # Detect changes in acceleration. We get to hook into ground truth values
+    # because we are simulating our sensors measuring the world.
     # Needs time diff between last tick and velocity diff from last tick
     def react(self):
-        # This is the sensor reacting to change.
-        d_psi = self.owner.body.angular_velocity
+        body = self.owner.body
         d_time = Robot.world.simulation_time - self.last_measurement
-        accel_psi = (d_psi - self.last_d_psi) / d_time
+
+        velocity = body.velocity_at_world_point(body.position)
+        ang_vel = body.angular_velocity
+        psi = body.angle
+
+        accel_forward = None
+        accel_lateral = None
+        accel_psi = None
+
+        # Could I just use F=MA?
+        accel_psi = (ang_vel - self.last_d_psi) / d_time
+        self.last_d_psi = ang_vel
+
+        # Use the rotation matrix to translate world-frame velocity to
+        # robot-frame components for forward and lateral velocity.
+        forward_vel = (velocity[0] * math.cos(psi)) + (velocity[1] * math.sin(psi))
+        lat_vel = (-velocity[0] * math.sin(psi)) + (velocity[1] * math.cos(psi))
+
+        accel_forward = (forward_vel - self.last_d_forward) / d_time
+        self.last_d_forward = forward_vel
+
+        accel_lateral = (lat_vel - self.last_d_lateral) / d_time
+        self.last_d_lateral = lat_vel
+
+        print("Lateral Acceleration: ", accel_lateral)
+        print("Forward Acceleration: ", accel_forward)
+        print("Radial Acceleration: ", accel_psi)
+
+        self.a_psi = accel_psi
+        self.a_forward = accel_forward
+        self.a_lateral = accel_lateral
+
         self.last_measurement = Robot.world.simulation_time
-        print(accel_psi)
 
 
 # Contains the internal model, basically the bot knowing where it has been
@@ -163,10 +192,17 @@ class InternalModel:
     grid_width = int(PARAMS.SURFACE_DIMS_M[0] / resolution)
     grid_height = int(PARAMS.SURFACE_DIMS_M[1] / resolution)
     space = None
+
     # The robot is pre-loaded with the shape of its environment
     # so it can model its cleaned area.
 
     def __init__(self):
+        # AKA roll, pitch, yaw
+        self.phi = 0
+        self.theta = 0
+        self.psi = 0  # The only one useful for a flat surface
+
+
         self.color = "red"
         space = [[False] * self.grid_width for x in range(self.grid_height)]
 
