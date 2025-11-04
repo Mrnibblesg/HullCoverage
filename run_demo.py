@@ -38,7 +38,6 @@ def init():
 
 
 def loop():
-    time = 0
     running = True
     while running:
 
@@ -52,8 +51,8 @@ def loop():
         world.space.step(1/PARAMS.FRAME_RATE)
         pygame.display.flip()
         world.clock.tick(PARAMS.FRAME_RATE)
-        time = time + world.clock.get_time()
-        if time >= PARAMS.RUN_TIME * 1000:
+        world.simulation_time += world.clock.get_time()
+        if world.simulation_time >= PARAMS.RUN_TIME * 1000:
             running = False
     end()
 

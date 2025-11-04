@@ -97,7 +97,6 @@ class Motor(Sensor):
         # print("Goal: ", goal)
         self.rotation = 0  # TODO remove this patchwork when implementing PID
         diff = goal - current
-        # print(diff)
         if (diff > 0):
             self.rotation = self.max_power
         else:
@@ -138,10 +137,10 @@ class IMU(Sensor):
     def react(self):
         # This is the sensor reacting to change.
         d_psi = self.owner.body.angular_velocity
-
-        # accel_psi = (d_psi - self.last_d_psi) / (
-        #        Robot.world.clock.get_time() - self.last_measurement)
-        self.last_measurement = Robot.world.clock.get_time()
+        d_time = Robot.world.simulation_time - self.last_measurement
+        accel_psi = (d_psi - self.last_d_psi) / d_time
+        self.last_measurement = Robot.world.simulation_time
+        print(accel_psi)
 
 
 # Contains the internal model, basically the bot knowing where it has been
