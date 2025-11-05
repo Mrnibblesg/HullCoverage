@@ -43,7 +43,7 @@ class Robot:
         print('check for neighbors to exchange info')
 
         # Change motor signals
-        self.motor.angle_controller(self.IMU.psi, math.pi)
+        self.motor.angle_controller(self.internal_model.psi_pred, math.pi)
         self.motor.velo_controller(0, 0)
 
     def communicate(self):
@@ -100,7 +100,7 @@ class Motor(Sensor):
             self.rotation = -self.max_power
 
     def velo_controller(self, current, goal):
-        self.forward = self.max_power
+        self.forward = 0  #self.max_power
 
 # How to simulate the barometer?
 # We can assume it's pretty accurate, with minimal amounts of noise in pressure
@@ -119,12 +119,12 @@ class Barometer(Sensor):
 class IMU(Sensor):
     def __init__(self, owner):
         super().__init__(owner)
-        self.last_measurement = 0
+        self.last_measurement = -1
         self.last_d_psi = 0
         self.last_d_forward = 0
         self.last_d_lateral = 0
 
-        self.a_psi
+        self.a_psi = 0
         self.a_forward = 0
         self.a_lateral = 0
 
@@ -204,10 +204,27 @@ class InternalModel:
         self.color = "red"
         self.space = [[False] * self.grid_width for x in range(self.grid_height)]
 
-    # Tick the robot's predicted position and update the internal model with new
+    # Tick the robot's predicted position and update
+    # the internal model with new
     # spots cleaned.
+    def dead_reckon(self, acceleration):
+        pass
+
+    # Update the internal model based on the internal predicted position
     def update(self):
-        print("Moving")
+        print("Updating internal map")
+        #grid_min_x = math.min(0, (position[0] - Robot.radius) / resolution)
+        #grid_max_x = math.max(PARAMS.)
+        #grid_min_y
+        #grid_max_y
+
+    # only for testing 
+    def __update_ground_truth(self, position):
+        print("Updating internal map")
+        #grid_min_x = math.max(0, ((position[0] - Robot.radius) / resolution)
+        #grid_max_x = math.min(PARAMS.)
+        #grid_min_y = math.max(0)
+        #grid_max_y = math.min
 
     def merge(model):
         print("Merge data models here")

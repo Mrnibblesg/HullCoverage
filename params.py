@@ -7,9 +7,8 @@ class Params:
     SURFACE_DIMS_M = (50, 25)
     PX_PER_M = 30
 
-    PADDING_PX = 25
-    WINDOW_DIMS = (SURFACE_DIMS_M[0] * PX_PER_M + 2 * PADDING_PX,
-                   SURFACE_DIMS_M[1] * PX_PER_M + 2 * PADDING_PX)
+    WINDOW_DIMS = (SURFACE_DIMS_M[0] * PX_PER_M,
+                   SURFACE_DIMS_M[1] * PX_PER_M)
     pass
 
 

@@ -31,7 +31,7 @@ def init():
 
     draw_options = pymunk.pygame_util.DrawOptions(screen)
 
-    r = robot.Robot(Vec2d(5, 5))
+    r = robot.Robot(Vec2d(50, 25))
     robots.append(r)
     world.space.add(r.body, r.shape)
     loop()
@@ -61,9 +61,9 @@ def draw():
     screen.fill((255, 255, 255))
     line_color = pygame.Color(200, 200, 200)
     pygame.draw.rect(screen, line_color,
-                     pygame.Rect(PARAMS.PADDING_PX, PARAMS.PADDING_PX,
-                                 PARAMS.WINDOW_DIMS[0] - 2 * PARAMS.PADDING_PX,
-                                 PARAMS.WINDOW_DIMS[1] - 2 * PARAMS.PADDING_PX),
+                     pygame.Rect(0, 0,
+                                 PARAMS.WINDOW_DIMS[0],
+                                 PARAMS.WINDOW_DIMS[1]),
                      1)
     world.space.debug_draw(draw_options)
 
