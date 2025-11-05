@@ -28,7 +28,7 @@ class Robot:
     # goals of the robot. The ultimate goal is full coverage.
     # To this end, we update our coverage map, see if anyone is nearby,
     # and then optionally update our PID controllers using some sort
-    # of path finding algorithm
+# of path finding algorithm
 
     def tick(self):
         print("Position: ", self.body.position)
@@ -38,7 +38,8 @@ class Robot:
 
     def planner(self):
         print('Update coverage map')
-        self.internal_model.update()
+        self.internal_model.__update_ground_truth(self)
+        self.internal_model.color()
 
         print('check for neighbors to exchange info')
 
@@ -184,9 +185,9 @@ class IMU(Sensor):
 #       there was a different approach that was better
 class InternalModel:
     # Defines the size of an internal model square, in m.
-    resolution = 0.1
-    grid_width = int(PARAMS.SURFACE_DIMS_M[0] / resolution)
-    grid_height = int(PARAMS.SURFACE_DIMS_M[1] / resolution)
+    RESOLUTION = 0.1
+    grid_width = int(PARAMS.SURFACE_DIMS_M[0] / RESOLUTION)
+    grid_height = int(PARAMS.SURFACE_DIMS_M[1] / RESOLUTION)
 
     # The robot is pre-loaded with the shape of its environment
     # so it can model its cleaned area.
@@ -218,13 +219,18 @@ class InternalModel:
         #grid_min_y
         #grid_max_y
 
-    # only for testing 
-    def __update_ground_truth(self, position):
+    # only for testing.
+    def __update_ground_truth(self, owner):
         print("Updating internal map")
-        #grid_min_x = math.max(0, ((position[0] - Robot.radius) / resolution)
-        #grid_max_x = math.min(PARAMS.)
-        #grid_min_y = math.max(0)
-        #grid_max_y = math.min
+        # iterate through centers of squares within the bounding box
+        bb = owner.shapes[0].bb
+        start_x = math.max(0, math.floor(bb.left / InternalModel.RESOLUTION))
+        start_y = math.max(0, math.floor(bb.top / InternalModel.RESOLUTION))
+        end_x = math.min()
+        end_y = math.min()
+        for ()
+        
+
 
     def merge(model):
         print("Merge data models here")
