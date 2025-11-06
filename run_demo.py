@@ -31,10 +31,9 @@ def init():
 
     draw_options = pymunk.pygame_util.DrawOptions(screen)
 
-    r = robot.Robot(Vec2d(2, 1))
+    r = robot.Robot(Vec2d(4, 5))
     robots.append(r)
     world.space.add(r.body, r.shape)
-    draw()
     loop()
 
 
