@@ -31,15 +31,14 @@ class Robot:
     # and then optionally update our PID controllers using some sort
     # of path finding algorithm
 
-    def tick(self, screen, pygame):
-        print("Position: ", self.body.position)
-        self.planner(screen, pygame)  # Set target parameters and control signals
+    def tick(self):
+        self.planner()  # Set target parameters and control signals
         self.communicate()
         self.move()  # Apply forces from motors
 
-    def planner(self, screen, pygame):
+    def planner(self):
         print('Update coverage map')
-        self.internal_model._update_ground_truth(self, screen, pygame)
+        self.internal_model._update_ground_truth(self)
 
         print('check for neighbors to exchange info')
 
@@ -224,15 +223,13 @@ class InternalModel:
     def update(self):
         print("Updating internal map")
 
-    # only for testing.
-    def _update_ground_truth(self, owner, screen, pygame):
+    # only for testing. Still use position, but use the predicted position instead of ground-truth.
+    def _update_ground_truth(self, owner):
         print("Updating internal map")
         [shape] = owner.body.shapes  # In pixels
-        print("BB: ", shape.bb.left, shape.bb.right, shape.bb.top, shape.bb.bottom)
-        print("Test distance: ", shape.point_query((1000, 450)).distance)
 
         # Get min and max top corners of grid squares near the circle. In pixels, rounded to
-        # a multiple of the pixels that 1 square takes up (RES).
+        # a multiple of the pixel size of 1 grid square.
         def reduce_to_multiple(x): return x - (x % (InternalModel.GRID_BOX_PX))
 
         start_x = max(0, reduce_to_multiple(shape.bb.left))
@@ -241,40 +238,28 @@ class InternalModel:
                     reduce_to_multiple(shape.bb.right))
         end_y = min(PARAMS.SURFACE_DIMS_M[1] * PARAMS.PX_PER_M,
                     reduce_to_multiple(shape.bb.top))
-        print("Bounds: ")
 
         # Use arange to iterate floats, checking if these are inside the circle.
         # x in pixels.
-        loops = 0
-        for x in np.arange(start_x, end_x, InternalModel.GRID_BOX_PX):
-            for y in np.arange(start_y, end_y, InternalModel.GRID_BOX_PX):
+        for x in np.arange(start_x, end_x + InternalModel.GRID_BOX_PX, InternalModel.GRID_BOX_PX):
+            for y in np.arange(start_y, end_y + InternalModel.GRID_BOX_PX, InternalModel.GRID_BOX_PX):
                 grid_center_px = (x + (InternalModel.GRID_BOX_PX / 2), y + (InternalModel.GRID_BOX_PX / 2))
-                print("Point: ", x, y, "Dist: ", shape.point_query(grid_center_px).distance)
-                loops += 1
-                pygame.draw.rect(screen, pygame.Color(255, 0, 0),
-                                 pygame.Rect(x,
-                                             y,
-                                             InternalModel.GRID_BOX_PX,
-                                             InternalModel.GRID_BOX_PX))
+                # The point query should be in pixel coordinates.
                 if (shape.point_query(grid_center_px).distance <= 0):
-                    print("point within circle!")
-        print("Loops: ", loops)
-        # The point query should be in pixel coordinates.
-        # For those that are, set them to true in the space.
+                    # Convert x and y to grid indices to set to true
+                    xi = math.floor(x / InternalModel.GRID_BOX_PX)
+                    yi = math.floor(y / InternalModel.GRID_BOX_PX)
+                    self.space[yi][xi] = True
 
     def merge(model):
         print("Merge data models here")
 
     def visualize(self, screen, pygame):
         print("visualize")
-        #pygame.draw.rect(screen, pygame.Color(255, 0, 0),
-        #                  pygame.Rect(0, 0, InternalModel.RES * PARAMS.PX_PER_M,
-        #                              InternalModel.RES * PARAMS.PX_PER_M))
 
         for x in range(InternalModel.GRID_WIDTH):
             for y in range(InternalModel.GRID_HEIGHT):
                 if (self.space[y][x]):
-                    print("Drawing a true square!")
                     pygame.draw.rect(screen, pygame.Color(255, 0, 0),
                                      pygame.Rect(x * InternalModel.RES * PARAMS.PX_PER_M,
                                                  y * InternalModel.RES * PARAMS.PX_PER_M,

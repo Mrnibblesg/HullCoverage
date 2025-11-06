@@ -46,7 +46,7 @@ def loop():
             if event.type == pygame.QUIT:
                 running = False
         for r in robots:
-            r.tick(screen, pygame)
+            r.tick()
         world.space.step(1 / PARAMS.FRAME_RATE)
         pygame.display.flip()
         world.clock.tick(PARAMS.FRAME_RATE)
