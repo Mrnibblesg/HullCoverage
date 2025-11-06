@@ -31,9 +31,10 @@ def init():
 
     draw_options = pymunk.pygame_util.DrawOptions(screen)
 
-    r = robot.Robot(Vec2d(50, 25))
+    r = robot.Robot(Vec2d(2, 1))
     robots.append(r)
     world.space.add(r.body, r.shape)
+    draw()
     loop()
 
 
@@ -44,27 +45,23 @@ def loop():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-        if not PARAMS.HEADLESS:
-            draw()
         for r in robots:
-            r.tick()
-        world.space.step(1/PARAMS.FRAME_RATE)
+            r.tick(screen, pygame)
+        world.space.step(1 / PARAMS.FRAME_RATE)
         pygame.display.flip()
         world.clock.tick(PARAMS.FRAME_RATE)
         world.simulation_time += world.clock.get_time()
         if world.simulation_time >= PARAMS.RUN_TIME * 1000:
             running = False
+        if not PARAMS.HEADLESS:
+            draw()
     end()
 
 
 def draw():
     screen.fill((255, 255, 255))
-    line_color = pygame.Color(200, 200, 200)
-    pygame.draw.rect(screen, line_color,
-                     pygame.Rect(0, 0,
-                                 PARAMS.WINDOW_DIMS[0],
-                                 PARAMS.WINDOW_DIMS[1]),
-                     1)
+    for r in robots:
+        r.visualize(screen, pygame)
     world.space.debug_draw(draw_options)
 
 

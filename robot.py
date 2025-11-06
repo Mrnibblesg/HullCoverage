@@ -3,13 +3,14 @@
 # since we're only really worried about collisions with the boundary
 # and with other robots. We don't need a whole physics solver.
 import pymunk
+import numpy as np
 from pymunk.vec2d import Vec2d
 import math
 from params import PARAMS
 
 
 class Robot:
-    radius = 1  # meters
+    radius = 1
     world = None
 
     def __init__(self, position):
@@ -30,15 +31,15 @@ class Robot:
     # and then optionally update our PID controllers using some sort
     # of path finding algorithm
 
-    def tick(self):
+    def tick(self, screen, pygame):
         print("Position: ", self.body.position)
-        self.planner()  # Set target parameters and control signals
+        self.planner(screen, pygame)  # Set target parameters and control signals
         self.communicate()
         self.move()  # Apply forces from motors
 
-    def planner(self):
+    def planner(self, screen, pygame):
         print('Update coverage map')
-        self.internal_model.update()
+        self.internal_model._update_ground_truth(self, screen, pygame)
 
         print('check for neighbors to exchange info')
 
@@ -53,8 +54,7 @@ class Robot:
         direction = self.body.angle
         force_vec = Vec2d(math.cos(direction), math.sin(direction))
 
-        self.body.apply_force_at_local_point(force_vec * self.motor.forward,
-                                             (0, 0))
+        self.body.apply_force_at_local_point(force_vec * self.motor.forward, (0, 0))
 
         # TODO Alternatively, set the torque
         perp_offset = force_vec.perpendicular_normal()
@@ -65,6 +65,9 @@ class Robot:
 
         # TODO After our forces are applied, our sensors react to the changes.
         self.IMU.react()
+
+    def visualize(self, screen, pygame):
+        self.internal_model.visualize(screen, pygame)
 
 
 # Base class for anything that is a sensor and can measure noise
@@ -98,9 +101,11 @@ class Motor(Sensor):
             self.rotation = self.max_power
         else:
             self.rotation = -self.max_power
+        self.rotation = 0
 
     def velo_controller(self, current, goal):
-        self.forward = 0  #self.max_power
+        self.forward = self.max_power * 50
+
 
 # How to simulate the barometer?
 # We can assume it's pretty accurate, with minimal amounts of noise in pressure
@@ -149,8 +154,10 @@ class IMU(Sensor):
 
         # Use the rotation matrix to translate world-frame velocity to
         # robot-frame components for forward and lateral velocity.
-        forward_vel = (velocity[0] * math.cos(psi)) + (velocity[1] * math.sin(psi))
-        lat_vel = (-velocity[0] * math.sin(psi)) + (velocity[1] * math.cos(psi))
+        forward_vel = (velocity[0] * math.cos(psi)) + \
+                      (velocity[1] * math.sin(psi))
+        lat_vel = (-velocity[0] * math.sin(psi)) + \
+                  (velocity[1] * math.cos(psi))
 
         accel_forward = (forward_vel - self.last_d_forward) / d_time
         self.last_d_forward = forward_vel
@@ -183,10 +190,12 @@ class IMU(Sensor):
 #       surface with both concave and convex regions. Though, Alli said that
 #       there was a different approach that was better
 class InternalModel:
-    # Defines the size of an internal model square, in m.
-    resolution = 0.1
-    grid_width = int(PARAMS.SURFACE_DIMS_M[0] / resolution)
-    grid_height = int(PARAMS.SURFACE_DIMS_M[1] / resolution)
+    # Defines the size of an internal model square, in m, and in px.
+    RES = 0.5
+    GRID_BOX_PX = RES * PARAMS.PX_PER_M
+
+    GRID_WIDTH = int(PARAMS.SURFACE_DIMS_M[0] / RES)
+    GRID_HEIGHT = int(PARAMS.SURFACE_DIMS_M[1] / RES)
 
     # The robot is pre-loaded with the shape of its environment
     # so it can model its cleaned area.
@@ -202,7 +211,8 @@ class InternalModel:
         self.y_pred = position[1]
 
         self.color = "red"
-        self.space = [[False] * self.grid_width for x in range(self.grid_height)]
+        self.space = [[False] * self.GRID_WIDTH for
+                      x in range(self.GRID_HEIGHT)]
 
     # Tick the robot's predicted position and update
     # the internal model with new
@@ -213,18 +223,60 @@ class InternalModel:
     # Update the internal model based on the internal predicted position
     def update(self):
         print("Updating internal map")
-        #grid_min_x = math.min(0, (position[0] - Robot.radius) / resolution)
-        #grid_max_x = math.max(PARAMS.)
-        #grid_min_y
-        #grid_max_y
 
-    # only for testing 
-    def __update_ground_truth(self, position):
+    # only for testing.
+    def _update_ground_truth(self, owner, screen, pygame):
         print("Updating internal map")
-        #grid_min_x = math.max(0, ((position[0] - Robot.radius) / resolution)
-        #grid_max_x = math.min(PARAMS.)
-        #grid_min_y = math.max(0)
-        #grid_max_y = math.min
+        [shape] = owner.body.shapes  # In pixels
+        print("BB: ", shape.bb.left, shape.bb.right, shape.bb.top, shape.bb.bottom)
+        print("Test distance: ", shape.point_query((1000, 450)).distance)
+
+        # Get min and max top corners of grid squares near the circle. In pixels, rounded to
+        # a multiple of the pixels that 1 square takes up (RES).
+        def reduce_to_multiple(x): return x - (x % (InternalModel.GRID_BOX_PX))
+
+        start_x = max(0, reduce_to_multiple(shape.bb.left))
+        start_y = max(0, reduce_to_multiple(shape.bb.bottom))
+        end_x = min(PARAMS.SURFACE_DIMS_M[0] * PARAMS.PX_PER_M,
+                    reduce_to_multiple(shape.bb.right))
+        end_y = min(PARAMS.SURFACE_DIMS_M[1] * PARAMS.PX_PER_M,
+                    reduce_to_multiple(shape.bb.top))
+        print("Bounds: ")
+
+        # Use arange to iterate floats, checking if these are inside the circle.
+        # x in pixels.
+        loops = 0
+        for x in np.arange(start_x, end_x, InternalModel.GRID_BOX_PX):
+            for y in np.arange(start_y, end_y, InternalModel.GRID_BOX_PX):
+                grid_center_px = (x + (InternalModel.GRID_BOX_PX / 2), y + (InternalModel.GRID_BOX_PX / 2))
+                print("Point: ", x, y, "Dist: ", shape.point_query(grid_center_px).distance)
+                loops += 1
+                pygame.draw.rect(screen, pygame.Color(255, 0, 0),
+                                 pygame.Rect(x,
+                                             y,
+                                             InternalModel.GRID_BOX_PX,
+                                             InternalModel.GRID_BOX_PX))
+                if (shape.point_query(grid_center_px).distance <= 0):
+                    print("point within circle!")
+        print("Loops: ", loops)
+        # The point query should be in pixel coordinates.
+        # For those that are, set them to true in the space.
 
     def merge(model):
         print("Merge data models here")
+
+    def visualize(self, screen, pygame):
+        print("visualize")
+        #pygame.draw.rect(screen, pygame.Color(255, 0, 0),
+        #                  pygame.Rect(0, 0, InternalModel.RES * PARAMS.PX_PER_M,
+        #                              InternalModel.RES * PARAMS.PX_PER_M))
+
+        for x in range(InternalModel.GRID_WIDTH):
+            for y in range(InternalModel.GRID_HEIGHT):
+                if (self.space[y][x]):
+                    print("Drawing a true square!")
+                    pygame.draw.rect(screen, pygame.Color(255, 0, 0),
+                                     pygame.Rect(x * InternalModel.RES * PARAMS.PX_PER_M,
+                                                 y * InternalModel.RES * PARAMS.PX_PER_M,
+                                                 InternalModel.RES * PARAMS.PX_PER_M,
+                                                 InternalModel.RES * PARAMS.PX_PER_M))
