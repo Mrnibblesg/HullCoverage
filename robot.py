@@ -229,8 +229,9 @@ class InternalModel:
     # spots cleaned using trapezoid rule.
     # Assuming the acceleration is instantaneous is probably a source of drift
     def dead_reckon(self, acceleration):
-        print(acceleration)
-        d_time = Robot.world.simulation_time - self.last_measurement
+        d_time = (Robot.world.simulation_time - self.last_measurement) / 1000
+        print("dtime: ", d_time)
+        # TODO: Change from using pygame time to pymunk time for calculations.
 
         dx = 0
         dy = 0
@@ -244,7 +245,7 @@ class InternalModel:
         self.prediction["v_psi"] += d_v_psi
         d_psi = d_time * self.prediction["v_psi"] - (d_time * d_v_psi)
         self.prediction["psi"] += d_psi
-
+        print("psi: ", self.prediction["psi"])
 
         #self.prediction.x += dx
         #self.prediction.y += dy
@@ -306,7 +307,6 @@ class InternalModel:
 
     def visualize(self, screen, pygame):
         print("visualize")
-
         for x in range(InternalModel.GRID_WIDTH):
             for y in range(InternalModel.GRID_HEIGHT):
                 if (self.space[y][x]):
@@ -315,3 +315,14 @@ class InternalModel:
                                                  y * InternalModel.RES * PARAMS.PX_PER_M,
                                                  InternalModel.RES * PARAMS.PX_PER_M,
                                                  InternalModel.RES * PARAMS.PX_PER_M))
+
+        
+        center = Vec2d(self.prediction["x"], self.prediction["y"])
+        front_line_end = center + Vec2d(Robot.radius * PARAMS.PX_PER_M * math.cos(self.prediction["psi"]),
+                                    Robot.radius * PARAMS.PX_PER_M * math.sin(self.prediction["psi"]))
+        pygame.draw.circle(screen, pygame.Color(0, 0, 255),
+                           center, Robot.radius * PARAMS.PX_PER_M)
+
+        pygame.draw.line(screen, pygame.Color(0, 0, 0),
+                         center, front_line_end)
+
