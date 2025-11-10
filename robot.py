@@ -38,8 +38,9 @@ class Robot:
 
     def planner(self):
         print('Update coverage map')
+        self.internal_model.dead_reckon(self.IMU.acceleration)
+        #self.internal_model.update()
         self.internal_model._update_ground_truth(self)
-
         print('check for neighbors to exchange info')
 
         # Change motor signals
@@ -128,9 +129,11 @@ class IMU(Sensor):
         self.last_d_forward = 0
         self.last_d_lateral = 0
 
-        self.a_psi = 0
-        self.a_forward = 0
-        self.a_lateral = 0
+        self.acceleration = {
+            "psi": 0,
+            "forward": 0,
+            "lateral": 0
+        }
 
     # Detect changes in acceleration. We get to hook into ground truth values
     # because we are simulating our sensors measuring the world.
@@ -168,9 +171,9 @@ class IMU(Sensor):
         print("Forward Acceleration: ", accel_forward)
         print("Radial Acceleration: ", accel_psi)
 
-        self.a_psi = accel_psi
-        self.a_forward = accel_forward
-        self.a_lateral = accel_lateral
+        self.acceleration["psi"] = accel_psi
+        self.acceleration["forward"] = accel_forward
+        self.acceleration["lateral"] = accel_lateral
 
         self.last_measurement = Robot.world.simulation_time
 
@@ -206,38 +209,85 @@ class InternalModel:
         self.psi_pred = 0  # The only one useful for a flat surface
 
         # Start out with knowledge. Predict the rest
-        self.x_pred = position[0]
-        self.y_pred = position[1]
+        self.prediction = {
+            "psi": 0,
+            "x": position[0],
+            "y": position[1],
 
-        self.color = "red"
+            "v_psi": 0,
+            "vx": 0,
+            "vy": 0
+        }
+        self.last_measurement = -1
         self.space = [[False] * self.GRID_WIDTH for
                       x in range(self.GRID_HEIGHT)]
 
+        self.color = "red"
+
     # Tick the robot's predicted position and update
     # the internal model with new
-    # spots cleaned.
+    # spots cleaned using trapezoid rule.
+    # Assuming the acceleration is instantaneous is probably a source of drift
     def dead_reckon(self, acceleration):
-        pass
+        print(acceleration)
+        d_time = Robot.world.simulation_time - self.last_measurement
+
+        dx = 0
+        dy = 0
+        d_psi = 0
+
+        d_vx = 0
+        d_vy = 0
+        d_v_psi = 0
+
+        d_v_psi = d_time * acceleration["psi"]
+        self.prediction["v_psi"] += d_v_psi
+        d_psi = d_time * self.prediction["v_psi"] - (d_time * d_v_psi)
+        self.prediction["psi"] += d_psi
+
+
+        #self.prediction.x += dx
+        #self.prediction.y += dy
+
+        #self.prediction.v_psi += d_v_psi
+        #self.preditction.vx += d_vx
+        #self.prediction.vy += d_vy
+        self.last_measurement = Robot.world.simulation_time
 
     # Update the internal model based on the internal predicted position
     def update(self):
         print("Updating internal map")
+        self.update_grid((self.prediction.x, self.prediction.y))
 
     # only for testing. Still use position, but use the predicted position instead of ground-truth.
     def _update_ground_truth(self, owner):
+        self.update_grid(owner.body.position)
+
+    def update_grid(self, position):
         print("Updating internal map")
-        [shape] = owner.body.shapes  # In pixels
+        # The source of our ground truth
+
+        adjusted_rad = Robot.radius * PARAMS.PX_PER_M
+        left = position.x - adjusted_rad
+        right = position.x + adjusted_rad
+        top = position.y + adjusted_rad
+        bottom = position.y - adjusted_rad
+
+        def robot_contains(point):
+            dx = position[0] - point[0]
+            dy = position[1] - point[1]
+            return (dx * dx) + (dy * dy) <= adjusted_rad * adjusted_rad
 
         # Get min and max top corners of grid squares near the circle. In pixels, rounded to
         # a multiple of the pixel size of 1 grid square.
         def reduce_to_multiple(x): return x - (x % (InternalModel.GRID_BOX_PX))
 
-        start_x = max(0, reduce_to_multiple(shape.bb.left))
-        start_y = max(0, reduce_to_multiple(shape.bb.bottom))
+        start_x = max(0, reduce_to_multiple(left))
+        start_y = max(0, reduce_to_multiple(bottom))
         end_x = min(PARAMS.SURFACE_DIMS_M[0] * PARAMS.PX_PER_M,
-                    reduce_to_multiple(shape.bb.right))
+                    reduce_to_multiple(right))
         end_y = min(PARAMS.SURFACE_DIMS_M[1] * PARAMS.PX_PER_M,
-                    reduce_to_multiple(shape.bb.top))
+                    reduce_to_multiple(top))
 
         # Use arange to iterate floats, checking if these are inside the circle.
         # x in pixels.
@@ -245,7 +295,7 @@ class InternalModel:
             for y in np.arange(start_y, end_y + InternalModel.GRID_BOX_PX, InternalModel.GRID_BOX_PX):
                 grid_center_px = (x + (InternalModel.GRID_BOX_PX / 2), y + (InternalModel.GRID_BOX_PX / 2))
                 # The point query should be in pixel coordinates.
-                if (shape.point_query(grid_center_px).distance <= 0):
+                if (robot_contains(grid_center_px)):
                     # Convert x and y to grid indices to set to true
                     xi = math.floor(x / InternalModel.GRID_BOX_PX)
                     yi = math.floor(y / InternalModel.GRID_BOX_PX)
