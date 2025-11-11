@@ -39,6 +39,7 @@ def init():
 
 def loop():
     running = True
+    step_interval = 1 / PARAMS.FRAME_RATE
     while running:
 
         for event in pygame.event.get():
@@ -46,11 +47,11 @@ def loop():
                 running = False
         for r in robots:
             r.tick()
-        world.space.step(1 / PARAMS.FRAME_RATE)
+        world.space.step(step_interval)
         pygame.display.flip()
         world.clock.tick(PARAMS.FRAME_RATE)
-        world.simulation_time += world.clock.get_time()
-        if world.simulation_time >= PARAMS.RUN_TIME * 1000:
+        world.simulation_time += step_interval
+        if world.simulation_time >= PARAMS.RUN_TIME:
             running = False
         if not PARAMS.HEADLESS:
             draw()

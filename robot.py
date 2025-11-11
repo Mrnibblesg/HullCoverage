@@ -104,7 +104,7 @@ class Motor(Sensor):
         self.rotation /= -3
 
     def velo_controller(self, current, goal):
-        #  self.forward = self.max_power * 50
+        self.forward = self.max_power * 50
         pass
 
 

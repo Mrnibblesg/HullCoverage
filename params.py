@@ -1,7 +1,7 @@
 class Params:
     HEADLESS = False
 
-    RUN_TIME = 15
+    RUN_TIME = 15  # Seconds
     FRAME_RATE = 60
 
     SURFACE_DIMS_M = (50, 25)
