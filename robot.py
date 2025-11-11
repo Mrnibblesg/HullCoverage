@@ -104,7 +104,8 @@ class Motor(Sensor):
         self.rotation /= -3
 
     def velo_controller(self, current, goal):
-        self.forward = self.max_power * 50
+        #  self.forward = self.max_power * 50
+        pass
 
 
 # How to simulate the barometer?
@@ -211,8 +212,8 @@ class InternalModel:
         # Start out with knowledge. Predict the rest
         self.prediction = {
             "psi": 0,
-            "x": position[0],
-            "y": position[1],
+            "x": PARAMS.SURFACE_DIMS_M[0] * PARAMS.PX_PER_M / 2,  # position[0],
+            "y": PARAMS.SURFACE_DIMS_M[1] * PARAMS.PX_PER_M / 2,
 
             "v_psi": 0,
             "vx": 0,
@@ -228,8 +229,9 @@ class InternalModel:
     # the internal model with new
     # spots cleaned using trapezoid rule.
     # Assuming the acceleration is instantaneous is probably a source of drift
+    # TODO: the problem is we're assuming per second when we're actually doing per-tick!
     def dead_reckon(self, acceleration):
-        d_time = (Robot.world.simulation_time - self.last_measurement) / 1000
+        d_time = (Robot.world.simulation_time - self.last_measurement)
         print("dtime: ", d_time)
         # TODO: Change from using pygame time to pymunk time for calculations.
 
@@ -246,6 +248,7 @@ class InternalModel:
         d_psi = d_time * self.prediction["v_psi"] - (d_time * d_v_psi)
         self.prediction["psi"] += d_psi
         print("psi: ", self.prediction["psi"])
+        print("vpsi: ", self.prediction["v_psi"])
 
         #self.prediction.x += dx
         #self.prediction.y += dy
@@ -292,9 +295,12 @@ class InternalModel:
 
         # Use arange to iterate floats, checking if these are inside the circle.
         # x in pixels.
-        for x in np.arange(start_x, end_x + InternalModel.GRID_BOX_PX, InternalModel.GRID_BOX_PX):
-            for y in np.arange(start_y, end_y + InternalModel.GRID_BOX_PX, InternalModel.GRID_BOX_PX):
-                grid_center_px = (x + (InternalModel.GRID_BOX_PX / 2), y + (InternalModel.GRID_BOX_PX / 2))
+        for x in np.arange(start_x, end_x + InternalModel.GRID_BOX_PX,
+                           InternalModel.GRID_BOX_PX):
+            for y in np.arange(start_y, end_y + InternalModel.GRID_BOX_PX,
+                               InternalModel.GRID_BOX_PX):
+                grid_center_px = (x + (InternalModel.GRID_BOX_PX / 2),
+                                  y + (InternalModel.GRID_BOX_PX / 2))
                 # The point query should be in pixel coordinates.
                 if (robot_contains(grid_center_px)):
                     # Convert x and y to grid indices to set to true
@@ -316,13 +322,11 @@ class InternalModel:
                                                  InternalModel.RES * PARAMS.PX_PER_M,
                                                  InternalModel.RES * PARAMS.PX_PER_M))
 
-        
         center = Vec2d(self.prediction["x"], self.prediction["y"])
-        front_line_end = center + Vec2d(Robot.radius * PARAMS.PX_PER_M * math.cos(self.prediction["psi"]),
-                                    Robot.radius * PARAMS.PX_PER_M * math.sin(self.prediction["psi"]))
+        front_line_end = Vec2d(Robot.radius * PARAMS.PX_PER_M * math.cos(self.prediction["psi"]),
+                               Robot.radius * PARAMS.PX_PER_M * math.sin(self.prediction["psi"]))
         pygame.draw.circle(screen, pygame.Color(0, 0, 255),
                            center, Robot.radius * PARAMS.PX_PER_M)
 
         pygame.draw.line(screen, pygame.Color(0, 0, 0),
-                         center, front_line_end)
-
+                         center, center + front_line_end)
