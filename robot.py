@@ -7,7 +7,7 @@ import numpy as np
 from pymunk.vec2d import Vec2d
 import math
 from params import PARAMS
-
+import matplotlib.pyplot as plt
 
 class Robot:
     radius = 1
@@ -37,14 +37,12 @@ class Robot:
         self.move()  # Apply forces from motors
 
     def planner(self):
-        print('Update coverage map')
         self.internal_model.dead_reckon(self.IMU.acceleration)
-        #self.internal_model.update()
-        self.internal_model._update_ground_truth(self)
-        print('check for neighbors to exchange info')
+        self.internal_model.update()
+        # self.internal_model._update_ground_truth(self)
 
         # Change motor signals
-        self.motor.angle_controller(self.internal_model.psi_pred, math.pi)
+        self.motor.angle_controller(self.internal_model.prediction["psi"], math.pi)
         self.motor.velo_controller(0, 0)
 
     def communicate(self):
@@ -56,17 +54,18 @@ class Robot:
         direction = self.body.angle
         force_vec = Vec2d(math.cos(direction), math.sin(direction))
 
+        # Demonstrate that any movement perp. to the force vector is ignored.
+        # temp_force_vec = Vec2d(math.cos(direction + 3 * math.pi / 4), math.sin(direction + 3 * math.pi / 4))
+
         self.body.apply_force_at_local_point(force_vec * self.motor.forward, (0, 0))
 
         # TODO Alternatively, set the torque
-        # Rotational force should be perpendicular, aligned to the plane of the wheels.
         perp_offset = force_vec.perpendicular_normal()
         self.body.apply_force_at_local_point(force_vec * self.motor.rotation,
                                              perp_offset / PARAMS.PX_PER_M)
         self.body.apply_force_at_local_point(-force_vec * self.motor.rotation,
                                              -perp_offset / PARAMS.PX_PER_M)
 
-        # TODO After our forces are applied, our sensors react to the changes.
         self.IMU.react()
 
     def visualize(self, screen, pygame):
@@ -100,11 +99,11 @@ class Motor(Sensor):
         # print("Goal: ", goal)
         self.rotation = 0  # TODO remove this patchwork when implementing PID
         diff = goal - current
-        if (diff > 0):
-            self.rotation = self.max_power
-        else:
-            self.rotation = -self.max_power
-        self.rotation /= -3
+        #if (diff > 0):
+            #    self.rotation = self.max_power
+        #else:
+            #    self.rotation = -self.max_power
+        self.rotation = self.max_power
 
     def velo_controller(self, current, goal):
         self.forward = self.max_power * -50
@@ -164,6 +163,7 @@ class IMU(Sensor):
                       (velocity[1] * math.sin(psi))
         lat_vel = (-velocity[0] * math.sin(psi)) + \
                   (velocity[1] * math.cos(psi))
+        # print("Lateral velocity: ", lat_vel)
 
         accel_forward = (forward_vel - self.last_d_forward) / d_time
         self.last_d_forward = forward_vel
@@ -171,9 +171,9 @@ class IMU(Sensor):
         accel_lateral = (lat_vel - self.last_d_lateral) / d_time
         self.last_d_lateral = lat_vel
 
-        print("Lateral Acceleration: ", accel_lateral)
-        print("Forward Acceleration: ", accel_forward)
-        print("Radial Acceleration: ", accel_psi)
+        # print("Lateral Acceleration: ", accel_lateral)
+        # print("Forward Acceleration: ", accel_forward)
+        # print("Radial Acceleration: ", accel_psi)
 
         self.acceleration["psi"] = accel_psi
         self.acceleration["forward"] = accel_forward
@@ -233,7 +233,9 @@ class InternalModel:
     # spots cleaned using trapezoid rule.
     # Assuming the acceleration is instantaneous is probably a source of drift
     def dead_reckon(self, acceleration):
-        print("Acceleration: ", acceleration)
+
+        # Plots for debug.
+        # print("Acceleration: ", acceleration)
 
         d_time = Robot.world.simulation_time - self.last_measurement
 
@@ -245,24 +247,29 @@ class InternalModel:
         d_vy = 0
         d_v_psi = 0
 
+        # is it because these are in the direction of the heading and not
+        # the acceleration?
+        psi = self.prediction["psi"]
+        world_accel = (acceleration["forward"] * math.cos(psi) -
+                       acceleration["lateral"] * math.sin(psi),
+                       acceleration["forward"] * math.sin(psi) +
+                       acceleration["lateral"] * math.cos(psi))
+        # print("World accel: ", world_accel)
+
         d_v_psi = d_time * acceleration["psi"]
         self.prediction["v_psi"] += d_v_psi
         d_psi = d_time * self.prediction["v_psi"] - (d_time * d_v_psi / 2)
         self.prediction["psi"] += d_psi
         self.prediction["psi"] %= 2 * math.pi
-        psi = self.prediction["psi"]
-        # is it because these are in the direction of the heading and not
-        # the acceleration?
-        world_accel = (acceleration["forward"] * math.cos(psi) -
-                       acceleration["lateral"] * math.sin(psi),
-                       acceleration["forward"] * math.sin(psi) +
-                       acceleration["lateral"] * math.cos(psi))
-        print("World accel: ", world_accel)
 
         d_vx = d_time * world_accel[0]
         self.prediction["vx"] += d_vx
         dx = d_time * self.prediction["vx"] - (d_time * d_vx / 2)
         self.prediction["x"] += dx
+        # print("model d_vx: ", d_vx)
+        # print("model vx: ", self.prediction["vx"])
+        # print("model dx: ", dx)
+        # print("model x: ", self.prediction["x"])
 
         d_vy = d_time * world_accel[1]
         self.prediction["vy"] += d_vy
@@ -270,26 +277,27 @@ class InternalModel:
         self.prediction["y"] += dy
 
         self.last_measurement = Robot.world.simulation_time
-        print("Final: ", self.prediction)
+        # print("Final: ", self.prediction)
 
     # Update the internal model based on the internal predicted position
     def update(self):
-        print("Updating internal map")
-        self.update_grid((self.prediction.x, self.prediction.y))
+        self.update_grid((self.prediction["x"],
+                          self.prediction["y"]))
 
     # only for testing. Still use position, but use the predicted position instead of ground-truth.
     def _update_ground_truth(self, owner):
-        self.update_grid(owner.body.position)
+        self.update_grid((owner.body.position.x,
+                          owner.body.position.y))
 
     def update_grid(self, position):
-        print("Updating internal map")
+        # print("Updating internal map")
         # The source of our ground truth
 
         adjusted_rad = Robot.radius * PARAMS.PX_PER_M
-        left = position.x - adjusted_rad
-        right = position.x + adjusted_rad
-        top = position.y + adjusted_rad
-        bottom = position.y - adjusted_rad
+        left = position[0] - adjusted_rad
+        right = position[0] + adjusted_rad
+        top = position[1] + adjusted_rad
+        bottom = position[1] - adjusted_rad
 
         def robot_contains(point):
             dx = position[0] - point[0]
@@ -323,10 +331,9 @@ class InternalModel:
                     self.space[yi][xi] = True
 
     def merge(model):
-        print("Merge data models here")
+        pass
 
     def visualize(self, screen, pygame):
-        print("visualize")
         for x in range(InternalModel.GRID_WIDTH):
             for y in range(InternalModel.GRID_HEIGHT):
                 if (self.space[y][x]):
