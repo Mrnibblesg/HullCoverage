@@ -5,6 +5,7 @@ from pymunk.vec2d import Vec2d
 from world import World
 from params import PARAMS
 import robot
+import math
 
 robots = []
 
@@ -31,7 +32,7 @@ def init():
 
     draw_options = pymunk.pygame_util.DrawOptions(screen)
 
-    r = robot.Robot(Vec2d(4, 5))
+    r = robot.Robot(Vec2d(PARAMS.SURFACE_DIMS_M[0] / 2, PARAMS.SURFACE_DIMS_M[1] / 2))
     robots.append(r)
     world.space.add(r.body, r.shape)
     loop()
@@ -47,6 +48,8 @@ def loop():
                 running = False
         for r in robots:
             r.tick()
+            # if world.simulation_time >= 5:
+                # r.body.angle = math.pi
         world.space.step(step_interval)
         pygame.display.flip()
         world.clock.tick(PARAMS.FRAME_RATE)

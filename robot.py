@@ -51,12 +51,15 @@ class Robot:
         pass
 
     def move(self):
+        # How are our wheels oriented? Is this even the right way to model it? If using
+        # wheels, then there should be extra friction when any lateral forces are present.
         direction = self.body.angle
         force_vec = Vec2d(math.cos(direction), math.sin(direction))
 
         self.body.apply_force_at_local_point(force_vec * self.motor.forward, (0, 0))
 
         # TODO Alternatively, set the torque
+        # Rotational force should be perpendicular, aligned to the plane of the wheels.
         perp_offset = force_vec.perpendicular_normal()
         self.body.apply_force_at_local_point(force_vec * self.motor.rotation,
                                              perp_offset / PARAMS.PX_PER_M)
@@ -104,7 +107,7 @@ class Motor(Sensor):
         self.rotation /= -3
 
     def velo_controller(self, current, goal):
-        self.forward = self.max_power * 50
+        self.forward = self.max_power * -50
         pass
 
 
@@ -229,11 +232,10 @@ class InternalModel:
     # the internal model with new
     # spots cleaned using trapezoid rule.
     # Assuming the acceleration is instantaneous is probably a source of drift
-    # TODO: the problem is we're assuming per second when we're actually doing per-tick!
     def dead_reckon(self, acceleration):
-        d_time = (Robot.world.simulation_time - self.last_measurement)
-        print("dtime: ", d_time)
-        # TODO: Change from using pygame time to pymunk time for calculations.
+        print("Acceleration: ", acceleration)
+
+        d_time = Robot.world.simulation_time - self.last_measurement
 
         dx = 0
         dy = 0
@@ -245,18 +247,30 @@ class InternalModel:
 
         d_v_psi = d_time * acceleration["psi"]
         self.prediction["v_psi"] += d_v_psi
-        d_psi = d_time * self.prediction["v_psi"] - (d_time * d_v_psi)
+        d_psi = d_time * self.prediction["v_psi"] - (d_time * d_v_psi / 2)
         self.prediction["psi"] += d_psi
-        print("psi: ", self.prediction["psi"])
-        print("vpsi: ", self.prediction["v_psi"])
+        self.prediction["psi"] %= 2 * math.pi
+        psi = self.prediction["psi"]
+        # is it because these are in the direction of the heading and not
+        # the acceleration?
+        world_accel = (acceleration["forward"] * math.cos(psi) -
+                       acceleration["lateral"] * math.sin(psi),
+                       acceleration["forward"] * math.sin(psi) +
+                       acceleration["lateral"] * math.cos(psi))
+        print("World accel: ", world_accel)
 
-        #self.prediction.x += dx
-        #self.prediction.y += dy
+        d_vx = d_time * world_accel[0]
+        self.prediction["vx"] += d_vx
+        dx = d_time * self.prediction["vx"] - (d_time * d_vx / 2)
+        self.prediction["x"] += dx
 
-        #self.prediction.v_psi += d_v_psi
-        #self.preditction.vx += d_vx
-        #self.prediction.vy += d_vy
+        d_vy = d_time * world_accel[1]
+        self.prediction["vy"] += d_vy
+        dy = d_time * self.prediction["vy"] - (d_time * d_vy / 2)
+        self.prediction["y"] += dy
+
         self.last_measurement = Robot.world.simulation_time
+        print("Final: ", self.prediction)
 
     # Update the internal model based on the internal predicted position
     def update(self):
