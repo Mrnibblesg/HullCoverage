@@ -7,7 +7,7 @@ import numpy as np
 from pymunk.vec2d import Vec2d
 import math
 from params import PARAMS
-import matplotlib.pyplot as plt
+
 
 class Robot:
     radius = 1
@@ -17,13 +17,13 @@ class Robot:
         self.body = pymunk.Body(5, pymunk.moment_for_circle(
             1, 0, self.radius))
 
-        self.body.position = position * PARAMS.PX_PER_M
+        self.body.position = position
         self.shape = pymunk.Circle(self.body, self.radius * PARAMS.PX_PER_M)
 
         self.baro = Barometer(self)
         self.IMU = IMU(self)
         self.motor = Motor(self)
-        self.internal_model = InternalModel(self.body.position)
+        self.internal_model = InternalModel(self.body.position, self.body.angle)
 
     # The job of the planner is to decide the next
     # goals of the robot. The ultimate goal is full coverage.
@@ -53,9 +53,6 @@ class Robot:
         # wheels, then there should be extra friction when any lateral forces are present.
         direction = self.body.angle
         force_vec = Vec2d(math.cos(direction), math.sin(direction))
-
-        # Demonstrate that any movement perp. to the force vector is ignored.
-        # temp_force_vec = Vec2d(math.cos(direction + 3 * math.pi / 4), math.sin(direction + 3 * math.pi / 4))
 
         self.body.apply_force_at_local_point(force_vec * self.motor.forward, (0, 0))
 
@@ -143,19 +140,13 @@ class IMU(Sensor):
     # Needs time diff between last tick and velocity diff from last tick
     def react(self):
         body = self.owner.body
-        d_time = Robot.world.simulation_time - self.last_measurement
 
         velocity = body.velocity_at_world_point(body.position)
         ang_vel = body.angular_velocity
         psi = body.angle
 
-        accel_forward = None
-        accel_lateral = None
-        accel_psi = None
-
-        # Could I just use F=MA?
-        accel_psi = (ang_vel - self.last_d_psi) / d_time
-        self.last_d_psi = ang_vel
+        # print(f'Real vx: {velocity[0]:.2f}')
+        # print(f'Real vy: {velocity[1]:.2f}')
 
         # Use the rotation matrix to translate world-frame velocity to
         # robot-frame components for forward and lateral velocity.
@@ -163,7 +154,22 @@ class IMU(Sensor):
                       (velocity[1] * math.sin(psi))
         lat_vel = (velocity[0] * math.sin(psi)) + \
                   (velocity[1] * math.cos(psi))
-        # print("Lateral velocity: ", lat_vel)
+
+        if self.last_measurement < 0:
+            self.last_measurement = Robot.world.simulation_time
+            self.last_d_forward = forward_vel
+            self.last_d_lateral = lat_vel
+            self.last_d_psi = ang_vel
+            return
+
+        d_time = Robot.world.simulation_time - self.last_measurement
+
+        accel_forward = None
+        accel_lateral = None
+        accel_psi = None
+
+        accel_psi = (ang_vel - self.last_d_psi) / d_time
+        self.last_d_psi = ang_vel
 
         accel_forward = (forward_vel - self.last_d_forward) / d_time
         self.last_d_forward = forward_vel
@@ -206,7 +212,7 @@ class InternalModel:
     # The robot is pre-loaded with the shape of its environment
     # so it can model its cleaned area.
 
-    def __init__(self, position):
+    def __init__(self, position, angle):
         # AKA roll, pitch, yaw
         self.phi_pred = 0
         self.theta_pred = 0
@@ -214,7 +220,7 @@ class InternalModel:
 
         # Start out with knowledge. Predict the rest
         self.prediction = {
-            "psi": 0,
+            "psi": angle,
             "x": PARAMS.SURFACE_DIMS_M[0] * PARAMS.PX_PER_M / 2,  # position[0],
             "y": PARAMS.SURFACE_DIMS_M[1] * PARAMS.PX_PER_M / 2,
 
@@ -234,8 +240,9 @@ class InternalModel:
     # Assuming the acceleration is instantaneous is probably a source of drift
     def dead_reckon(self, acceleration):
 
-        # Plots for debug.
-        # print("Acceleration: ", acceleration)
+        if self.last_measurement < 0:
+            self.last_measurement = Robot.world.simulation_time
+            return
 
         d_time = Robot.world.simulation_time - self.last_measurement
 
@@ -275,6 +282,10 @@ class InternalModel:
         self.prediction["y"] += dy
 
         self.last_measurement = Robot.world.simulation_time
+
+        # print(f'Model vx: {self.prediction["vx"]:.2f}')
+        # print(f'Model vy: {self.prediction["vy"]:.2f}')
+
         # print("Final: ", self.prediction)
 
     # Update the internal model based on the internal predicted position

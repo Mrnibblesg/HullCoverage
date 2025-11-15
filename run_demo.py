@@ -37,8 +37,8 @@ def init():
 
     draw_options = pymunk.pygame_util.DrawOptions(screen)
 
-    r = robot.Robot(Vec2d(PARAMS.SURFACE_DIMS_M[0] / 2,
-                          PARAMS.SURFACE_DIMS_M[1] / 2))
+    r = robot.Robot(Vec2d(PARAMS.SURFACE_DIMS_M[0] * PARAMS.PX_PER_M / 2,
+                          PARAMS.SURFACE_DIMS_M[1] * PARAMS.PX_PER_M / 2))
     robots.append(r)
     world.space.add(r.body, r.shape)
 
