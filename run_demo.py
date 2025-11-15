@@ -50,36 +50,15 @@ def init():
 def loop():
     running = True
     step_interval = 1 / PARAMS.FRAME_RATE
-
-    plt.ion()
-    fig, ax = plt.subplots()
-    ax.set_xlim(0, 20)
-    ax.set_ylim(0, 2*math.pi)
-    (line_psi_pred,) = ax.plot([], [])
-    line_psi_pred.color = "blue"
-    (line_psi_real,) = ax.plot([], [])
-    line_psi_real.color = "red"
-    xdata_pred, ydata_pred = [], []
-    ydata_real = []
-
+    # Only if HEADLESS
     while running:
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
 
-        for r in robots:
+        for i, r in enumerate(robots):
             r.tick()
-            xdata_pred.append(robot.Robot.world.simulation_time)
-            ydata_pred.append(r.internal_model.prediction["psi"])
-            ydata_real.append(r.body.angle)
-            line_psi_pred.set_data(xdata_pred, ydata_pred)
-            line_psi_real.set_data(xdata_pred, ydata_real)
-            
-            ax.draw_artist(ax.patch)
-            ax.draw_artist(line_psi_pred)
-            ax.draw_artist(line_psi_real)
-            fig.canvas.flush_events()
 
         world.space.step(step_interval)
         pygame.display.flip()
