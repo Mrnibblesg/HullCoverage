@@ -159,9 +159,9 @@ class IMU(Sensor):
 
         # Use the rotation matrix to translate world-frame velocity to
         # robot-frame components for forward and lateral velocity.
-        forward_vel = (velocity[0] * math.cos(psi)) + \
+        forward_vel = (velocity[0] * math.cos(psi)) - \
                       (velocity[1] * math.sin(psi))
-        lat_vel = (-velocity[0] * math.sin(psi)) + \
+        lat_vel = (velocity[0] * math.sin(psi)) + \
                   (velocity[1] * math.cos(psi))
         # print("Lateral velocity: ", lat_vel)
 
@@ -247,32 +247,30 @@ class InternalModel:
         d_vy = 0
         d_v_psi = 0
 
-        # is it because these are in the direction of the heading and not
-        # the acceleration?
         psi = self.prediction["psi"]
-        world_accel = (acceleration["forward"] * math.cos(psi) -
-                       acceleration["lateral"] * math.sin(psi),
-                       acceleration["forward"] * math.sin(psi) +
-                       acceleration["lateral"] * math.cos(psi))
-        # print("World accel: ", world_accel)
+        psi_sensor_frame = -psi
+        world_accel = (acceleration["forward"] * math.cos(psi_sensor_frame) -
+                       acceleration["lateral"] * math.sin(psi_sensor_frame),
+                       acceleration["forward"] * math.sin(psi_sensor_frame) +
+                       acceleration["lateral"] * math.cos(psi_sensor_frame))
 
+        # Integrate twice for psi, x, and y.
         d_v_psi = d_time * acceleration["psi"]
         self.prediction["v_psi"] += d_v_psi
+
         d_psi = d_time * self.prediction["v_psi"] - (d_time * d_v_psi / 2)
         self.prediction["psi"] += d_psi
         self.prediction["psi"] %= 2 * math.pi
 
         d_vx = d_time * world_accel[0]
         self.prediction["vx"] += d_vx
+
         dx = d_time * self.prediction["vx"] - (d_time * d_vx / 2)
         self.prediction["x"] += dx
-        # print("model d_vx: ", d_vx)
-        # print("model vx: ", self.prediction["vx"])
-        # print("model dx: ", dx)
-        # print("model x: ", self.prediction["x"])
 
         d_vy = d_time * world_accel[1]
         self.prediction["vy"] += d_vy
+
         dy = d_time * self.prediction["vy"] - (d_time * d_vy / 2)
         self.prediction["y"] += dy
 

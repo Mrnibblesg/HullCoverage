@@ -41,7 +41,7 @@ def init():
                           PARAMS.SURFACE_DIMS_M[1] / 2))
     robots.append(r)
     world.space.add(r.body, r.shape)
-    
+
     # TODO only when !headless & debug
 
     loop()
