@@ -1,7 +1,4 @@
 # This file contains the code for each cleaning robot.
-# I probably want to get rid of pymunk. I can do collision detection myself,
-# since we're only really worried about collisions with the boundary
-# and with other robots. We don't need a whole physics solver.
 import pymunk
 import numpy as np
 from pymunk.vec2d import Vec2d
@@ -106,20 +103,15 @@ class Motor(Sensor):
         pass
 
 
-# How to simulate the barometer?
-# We can assume it's pretty accurate, with minimal amounts of noise in pressure
 class Barometer(Sensor):
     def __init__(self, owner):
         super().__init__(owner)
-        self.depth = 0  # meters
+        self.depth = 0
 
     def measure(self):
         self.depth = self.owner.body.position[1]
 
 
-# Detects current acceleration (3-axis accelerometer/gyroscope)
-# TODO could you measure water flow for a more accurate reading of velocity?
-# TODO Better to use quaternions for this but it's euler angles for now
 class IMU(Sensor):
     def __init__(self, owner):
         super().__init__(owner)
@@ -136,7 +128,6 @@ class IMU(Sensor):
 
     # Detect changes in acceleration. We get to hook into ground truth values
     # because we are simulating our sensors measuring the world.
-    # Needs time diff between last tick and velocity diff from last tick
     def react(self):
         body = self.owner.body
 
@@ -207,14 +198,10 @@ class InternalModel:
     GRID_WIDTH = int(PARAMS.SURFACE_DIMS[0] / RES)
     GRID_HEIGHT = int(PARAMS.SURFACE_DIMS[1] / RES)
 
-    # The robot is pre-loaded with the shape of its environment
-    # so it can model its cleaned area.
-
     def __init__(self, position, angle):
-        # AKA roll, pitch, yaw
         self.phi_pred = 0
         self.theta_pred = 0
-        self.psi_pred = 0  # The only one useful for a flat surface
+        self.psi_pred = 0
 
         # Start out with knowledge. Predict the rest
         self.prediction = {
@@ -297,9 +284,6 @@ class InternalModel:
                           owner.body.position.y))
 
     def update_grid(self, position):
-        # print("Updating internal map")
-        # The source of our ground truth
-        # TODO Redo loop to use integer indexing instead.
         left = position[0] - Robot.radius
         right = position[0] + Robot.radius
         top = position[1] + Robot.radius
@@ -310,8 +294,7 @@ class InternalModel:
             dy = position[1] - point[1]
             return (dx * dx) + (dy * dy) <= Robot.radius * Robot.radius
 
-        # Get min and max top corners of grid squares near the circle. In pixels, rounded to
-        # a multiple of the pixel size of 1 grid square.
+        # Get min and max top corners of grid squares near the circle.
         def reduce_to_multiple(x): return x - (x % (InternalModel.RES))
 
         start_x = max(0, int(left / InternalModel.RES))
@@ -319,8 +302,6 @@ class InternalModel:
         end_x = min(InternalModel.GRID_WIDTH, math.ceil(right / InternalModel.RES))
         end_y = min(InternalModel.GRID_HEIGHT, math.ceil(top / InternalModel.RES))
 
-        # Use arange to iterate floats, checking if these are inside the circle.
-        # x in pixels.
         for x in range(start_x, end_x):
             for y in range(start_y, end_y):
                 grid_center = (x * InternalModel.RES + InternalModel.RES / 2,
