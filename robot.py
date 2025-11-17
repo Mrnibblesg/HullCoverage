@@ -1,6 +1,5 @@
 # This file contains the code for each cleaning robot.
 import pymunk
-import numpy as np
 from pymunk.vec2d import Vec2d
 import math
 from params import PARAMS
@@ -88,18 +87,16 @@ class Motor(Sensor):
     # Not a full PID yet
     # apply the full power to get the values to the goal
     def angle_controller(self, current, goal):
-        # print("Current: ", current)
-        # print("Goal: ", goal)
-        self.rotation = 0  # TODO remove this patchwork when implementing PID
-        # diff = goal - current
-        #if (diff > 0):
-            #    self.rotation = self.max_power
-        #else:
-            #    self.rotation = -self.max_power
-        # self.rotation = self.max_power
+        if (Robot.world.simulation_time < 5):
+            self.rotation = 0
+        else:
+            self.rotation = -300
 
     def velo_controller(self, current, goal):
-        self.forward = self.max_power * 50
+        if (Robot.world.simulation_time < 5):
+            self.forward = 500
+        else:
+            self.forward = 0
         pass
 
 

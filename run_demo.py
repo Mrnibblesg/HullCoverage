@@ -26,12 +26,12 @@ def init():
 
     # Our robot is magnetically attached, so we have high friction
     # and don't need to account for slipping.
-    world.space.damping = 0.01
+    world.space.damping = 0.5
 
     draw_options = pymunk.pygame_util.DrawOptions(screen)
 
-    r = robot.Robot(Vec2d(PARAMS.SURFACE_DIMS[0] / 2,
-                          PARAMS.SURFACE_DIMS[1] / 2))
+    r = robot.Robot(Vec2d(PARAMS.SURFACE_DIMS[0] / 4,
+                          PARAMS.SURFACE_DIMS[1] / 4))
     robots.append(r)
     world.space.add(r.body, r.shape)
 
