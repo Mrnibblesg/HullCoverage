@@ -10,15 +10,14 @@ from params import PARAMS
 
 
 class Robot:
-    radius = 1
+    radius = 30
     world = None
 
     def __init__(self, position):
-        self.body = pymunk.Body(5, pymunk.moment_for_circle(
-            1, 0, self.radius))
+        self.body = pymunk.Body(5, pymunk.moment_for_circle(1, 0, self.radius))
 
         self.body.position = position
-        self.shape = pymunk.Circle(self.body, self.radius * PARAMS.PX_PER_M)
+        self.shape = pymunk.Circle(self.body, self.radius)
 
         self.baro = Barometer(self)
         self.IMU = IMU(self)
@@ -59,9 +58,9 @@ class Robot:
         # TODO Alternatively, set the torque
         perp_offset = force_vec.perpendicular_normal()
         self.body.apply_force_at_local_point(force_vec * self.motor.rotation,
-                                             perp_offset / PARAMS.PX_PER_M)
+                                             perp_offset)
         self.body.apply_force_at_local_point(-force_vec * self.motor.rotation,
-                                             -perp_offset / PARAMS.PX_PER_M)
+                                             -perp_offset)
 
         self.IMU.react()
 
@@ -95,15 +94,15 @@ class Motor(Sensor):
         # print("Current: ", current)
         # print("Goal: ", goal)
         self.rotation = 0  # TODO remove this patchwork when implementing PID
-        diff = goal - current
+        # diff = goal - current
         #if (diff > 0):
             #    self.rotation = self.max_power
         #else:
             #    self.rotation = -self.max_power
-        self.rotation = self.max_power
+        # self.rotation = self.max_power
 
     def velo_controller(self, current, goal):
-        self.forward = self.max_power * -50
+        self.forward = self.max_power * 50
         pass
 
 
@@ -203,11 +202,10 @@ class IMU(Sensor):
 #       there was a different approach that was better
 class InternalModel:
     # Defines the size of an internal model square, in m, and in px.
-    RES = 0.5
-    GRID_BOX_PX = RES * PARAMS.PX_PER_M
+    RES = 15
 
-    GRID_WIDTH = int(PARAMS.SURFACE_DIMS_M[0] / RES)
-    GRID_HEIGHT = int(PARAMS.SURFACE_DIMS_M[1] / RES)
+    GRID_WIDTH = int(PARAMS.SURFACE_DIMS[0] / RES)
+    GRID_HEIGHT = int(PARAMS.SURFACE_DIMS[1] / RES)
 
     # The robot is pre-loaded with the shape of its environment
     # so it can model its cleaned area.
@@ -221,8 +219,8 @@ class InternalModel:
         # Start out with knowledge. Predict the rest
         self.prediction = {
             "psi": angle,
-            "x": PARAMS.SURFACE_DIMS_M[0] * PARAMS.PX_PER_M / 2,  # position[0],
-            "y": PARAMS.SURFACE_DIMS_M[1] * PARAMS.PX_PER_M / 2,
+            "x": position[0],
+            "y": position[1],
 
             "v_psi": 0,
             "vx": 0,
@@ -301,42 +299,42 @@ class InternalModel:
     def update_grid(self, position):
         # print("Updating internal map")
         # The source of our ground truth
-
-        adjusted_rad = Robot.radius * PARAMS.PX_PER_M
-        left = position[0] - adjusted_rad
-        right = position[0] + adjusted_rad
-        top = position[1] + adjusted_rad
-        bottom = position[1] - adjusted_rad
+        # TODO Redo loop to use integer indexing instead.
+        left = position[0] - Robot.radius
+        right = position[0] + Robot.radius
+        top = position[1] + Robot.radius
+        bottom = position[1] - Robot.radius
 
         def robot_contains(point):
             dx = position[0] - point[0]
             dy = position[1] - point[1]
-            return (dx * dx) + (dy * dy) <= adjusted_rad * adjusted_rad
+            return (dx * dx) + (dy * dy) <= Robot.radius * Robot.radius
 
         # Get min and max top corners of grid squares near the circle. In pixels, rounded to
         # a multiple of the pixel size of 1 grid square.
-        def reduce_to_multiple(x): return x - (x % (InternalModel.GRID_BOX_PX))
+        def reduce_to_multiple(x): return x - (x % (InternalModel.RES))
 
         start_x = max(0, reduce_to_multiple(left))
         start_y = max(0, reduce_to_multiple(bottom))
-        end_x = min(PARAMS.SURFACE_DIMS_M[0] * PARAMS.PX_PER_M,
+        end_x = min(PARAMS.SURFACE_DIMS[0],
                     reduce_to_multiple(right))
-        end_y = min(PARAMS.SURFACE_DIMS_M[1] * PARAMS.PX_PER_M,
+        end_y = min(PARAMS.SURFACE_DIMS[1],
                     reduce_to_multiple(top))
 
         # Use arange to iterate floats, checking if these are inside the circle.
         # x in pixels.
-        for x in np.arange(start_x, end_x + InternalModel.GRID_BOX_PX,
-                           InternalModel.GRID_BOX_PX):
-            for y in np.arange(start_y, end_y + InternalModel.GRID_BOX_PX,
-                               InternalModel.GRID_BOX_PX):
-                grid_center_px = (x + (InternalModel.GRID_BOX_PX / 2),
-                                  y + (InternalModel.GRID_BOX_PX / 2))
+        for x in np.arange(start_x, end_x + InternalModel.RES,
+                           InternalModel.RES):
+            for y in np.arange(start_y, end_y + InternalModel.RES,
+                               InternalModel.RES):
+                grid_center_px = (x + (InternalModel.RES / 2),
+                                  y + (InternalModel.RES / 2))
                 # The point query should be in pixel coordinates.
                 if (robot_contains(grid_center_px)):
                     # Convert x and y to grid indices to set to true
-                    xi = math.floor(x / InternalModel.GRID_BOX_PX)
-                    yi = math.floor(y / InternalModel.GRID_BOX_PX)
+                    xi = math.floor(x / InternalModel.RES)
+                    yi = math.floor(y / InternalModel.RES)
+                    print(f'xi: {xi}, width: {self.GRID_WIDTH}')
                     self.space[yi][xi] = True
 
     def merge(model):
@@ -347,16 +345,16 @@ class InternalModel:
             for y in range(InternalModel.GRID_HEIGHT):
                 if (self.space[y][x]):
                     pygame.draw.rect(screen, pygame.Color(255, 0, 0),
-                                     pygame.Rect(x * InternalModel.RES * PARAMS.PX_PER_M,
-                                                 y * InternalModel.RES * PARAMS.PX_PER_M,
-                                                 InternalModel.RES * PARAMS.PX_PER_M,
-                                                 InternalModel.RES * PARAMS.PX_PER_M))
+                                     pygame.Rect(x * InternalModel.RES,
+                                                 y * InternalModel.RES,
+                                                 InternalModel.RES,
+                                                 InternalModel.RES))
 
         center = Vec2d(self.prediction["x"], self.prediction["y"])
-        front_line_end = Vec2d(Robot.radius * PARAMS.PX_PER_M * math.cos(self.prediction["psi"]),
-                               Robot.radius * PARAMS.PX_PER_M * math.sin(self.prediction["psi"]))
+        front_line_end = Vec2d(Robot.radius * math.cos(self.prediction["psi"]),
+                               Robot.radius * math.sin(self.prediction["psi"]))
         pygame.draw.circle(screen, pygame.Color(0, 0, 255),
-                           center, Robot.radius * PARAMS.PX_PER_M)
+                           center, Robot.radius)
 
         pygame.draw.line(screen, pygame.Color(0, 0, 0),
                          center, center + front_line_end)
