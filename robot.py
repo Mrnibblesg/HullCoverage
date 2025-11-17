@@ -314,28 +314,19 @@ class InternalModel:
         # a multiple of the pixel size of 1 grid square.
         def reduce_to_multiple(x): return x - (x % (InternalModel.RES))
 
-        start_x = max(0, reduce_to_multiple(left))
-        start_y = max(0, reduce_to_multiple(bottom))
-        end_x = min(PARAMS.SURFACE_DIMS[0],
-                    reduce_to_multiple(right))
-        end_y = min(PARAMS.SURFACE_DIMS[1],
-                    reduce_to_multiple(top))
+        start_x = max(0, int(left / InternalModel.RES))
+        start_y = max(0, int(bottom / InternalModel.RES))
+        end_x = min(InternalModel.GRID_WIDTH, math.ceil(right / InternalModel.RES))
+        end_y = min(InternalModel.GRID_HEIGHT, math.ceil(top / InternalModel.RES))
 
         # Use arange to iterate floats, checking if these are inside the circle.
         # x in pixels.
-        for x in np.arange(start_x, end_x + InternalModel.RES,
-                           InternalModel.RES):
-            for y in np.arange(start_y, end_y + InternalModel.RES,
-                               InternalModel.RES):
-                grid_center_px = (x + (InternalModel.RES / 2),
-                                  y + (InternalModel.RES / 2))
-                # The point query should be in pixel coordinates.
-                if (robot_contains(grid_center_px)):
-                    # Convert x and y to grid indices to set to true
-                    xi = math.floor(x / InternalModel.RES)
-                    yi = math.floor(y / InternalModel.RES)
-                    print(f'xi: {xi}, width: {self.GRID_WIDTH}')
-                    self.space[yi][xi] = True
+        for x in range(start_x, end_x):
+            for y in range(start_y, end_y):
+                grid_center = (x * InternalModel.RES + InternalModel.RES / 2,
+                               y * InternalModel.RES + InternalModel.RES / 2)
+                if (robot_contains(grid_center)):
+                    self.space[y][x] = True
 
     def merge(model):
         pass
