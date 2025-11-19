@@ -75,7 +75,7 @@ class Sensor:
 
 # In charge of the forces driving the robot, directly intertwined with the PIDs
 class Motor(Sensor):
-    max_power = 30  # units: ??
+    max_power = 30
     rotation = 0
     forward = 0
 
@@ -87,13 +87,13 @@ class Motor(Sensor):
     # Not a full PID yet
     # apply the full power to get the values to the goal
     def angle_controller(self, current, goal):
-        if (Robot.world.simulation_time < 5):
+        if (Robot.world.simulation_time < 2):
             self.rotation = 0
         else:
             self.rotation = -300
 
     def velo_controller(self, current, goal):
-        if (Robot.world.simulation_time < 5):
+        if (Robot.world.simulation_time < 2):
             self.forward = 500
         else:
             self.forward = 0
@@ -129,14 +129,24 @@ class IMU(Sensor):
         body = self.owner.body
 
         velocity = body.velocity_at_world_point(body.position)
+
         ang_vel = body.angular_velocity
         psi = body.angle
 
-        # print(f'Real vx: {velocity[0]:.2f}')
-        # print(f'Real vy: {velocity[1]:.2f}')
+        # TODO: Use pymunk body.force and body.mass for linear acceleration
+        # to convert to forward and lateral accel instead?
+        # TODO: For angular accel, torque over the moment?
 
-        # Use the rotation matrix to translate world-frame velocity to
-        # robot-frame components for forward and lateral velocity.
+        #linear_accel = self.owner.body.force / self.owner.body.mass
+        #accel_psi = self.owner.body.torque / self.owner.body.moment
+
+        #accel_forward = (linear_accel[0] * math.cos(psi)) - \
+        #                (linear_accel[1] * math.sin(psi))
+        #accel_lateral = (linear_accel[0] * math.sin(psi)) + \
+        #                (linear_accel[1] * math.cos(psi))
+
+        ## Use the rotation matrix to translate world-frame velocity to
+        ## robot-frame components for forward and lateral velocity.
         forward_vel = (velocity[0] * math.cos(psi)) - \
                       (velocity[1] * math.sin(psi))
         lat_vel = (velocity[0] * math.sin(psi)) + \
@@ -158,6 +168,11 @@ class IMU(Sensor):
         accel_psi = (ang_vel - self.last_d_psi) / d_time
         self.last_d_psi = ang_vel
 
+        # We should determine x acceleration first, and THEN translate.
+        # There's a problem here, where the last accel_forward is in another frame.
+        # TODO There's an issue here if we're rotating. accel_forward
+        # and lateral will be skewed slightly. We need to take into account
+        # the rotation.
         accel_forward = (forward_vel - self.last_d_forward) / d_time
         self.last_d_forward = forward_vel
 
@@ -243,9 +258,19 @@ class InternalModel:
                        acceleration["forward"] * math.sin(psi_sensor_frame) +
                        acceleration["lateral"] * math.cos(psi_sensor_frame))
 
+        # TODO Changing psi will change the direction and magnitudes
+        # of the forward and lateral components!
+        # We can use the d_psi to determine which direction the last values
+        # were from. Use another linear map on
+        # d_psi and our predicted accelerations/velocities to account
+        # for previous values?
+        # BEFORE INCORPORATING THE LATERAL AND FORWARD ACCELERATION,
+        # apply the rotation and then ????
+        rot_coupling = ()
         # Integrate twice for psi, x, and y.
         d_v_psi = d_time * acceleration["psi"]
         self.prediction["v_psi"] += d_v_psi
+
 
         d_psi = d_time * self.prediction["v_psi"] - (d_time * d_v_psi / 2)
         self.prediction["psi"] += d_psi
