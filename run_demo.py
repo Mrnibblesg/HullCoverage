@@ -25,7 +25,8 @@ def init():
     screen = pygame.display.set_mode(PARAMS.WINDOW_DIMS)
 
     # Our robot is magnetically attached, so we have high friction
-    # and don't need to account for slipping.
+    # and don't need to account for much slipping. The real value is 0.01
+    # but we're using 0.5 for testing purposes.
     world.space.damping = 0.5
 
     draw_options = pymunk.pygame_util.DrawOptions(screen)

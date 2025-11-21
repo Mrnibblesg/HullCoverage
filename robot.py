@@ -28,7 +28,7 @@ class Robot:
 
     def tick(self):
         self.planner()  # Set target parameters and control signals
-        self.communicate()
+        # self.communicate()
         self.move()  # Apply forces from motors
 
     def planner(self):
@@ -44,14 +44,13 @@ class Robot:
         pass
 
     def move(self):
-        # How are our wheels oriented? Is this even the right way to model it? If using
-        # wheels, then there should be extra friction when any lateral forces are present.
         direction = self.body.angle
         force_vec = Vec2d(math.cos(direction), math.sin(direction))
 
         self.body.apply_force_at_local_point(force_vec * self.motor.forward, (0, 0))
 
-        # TODO Alternatively, set the torque
+        # TODO Alternatively, set the torque. For wheels this is technically a more accurate
+        # representation.
         perp_offset = force_vec.perpendicular_normal()
         self.body.apply_force_at_local_point(force_vec * self.motor.rotation,
                                              perp_offset)
@@ -87,19 +86,20 @@ class Motor(Sensor):
     # Not a full PID yet
     # apply the full power to get the values to the goal
     def angle_controller(self, current, goal):
-        if (Robot.world.simulation_time < 5):
+        if (Robot.world.simulation_time < 2):
             self.rotation = 0
         else:
             self.rotation = -300
 
     def velo_controller(self, current, goal):
-        if (Robot.world.simulation_time < 5):
+        if (Robot.world.simulation_time < 2):
             self.forward = 500
         else:
             self.forward = 0
         pass
 
 
+# TODO Not used.
 class Barometer(Sensor):
     def __init__(self, owner):
         super().__init__(owner)
@@ -131,9 +131,6 @@ class IMU(Sensor):
         velocity = body.velocity_at_world_point(body.position)
         ang_vel = body.angular_velocity
         psi = body.angle
-
-        # print(f'Real vx: {velocity[0]:.2f}')
-        # print(f'Real vy: {velocity[1]:.2f}')
 
         # Use the rotation matrix to translate world-frame velocity to
         # robot-frame components for forward and lateral velocity.
@@ -178,28 +175,14 @@ class IMU(Sensor):
 # Contains the internal model, basically the bot knowing where it has been
 # based on landmarks. This will be shared with neighboring bots
 # whenever they are encountered.
-
-# Internal models can be modeled by either:
-#   A bunch of circles on a continuous space (Maybe this?)
-#       How would I determine areas that aren't covered yet?
-#       I can simply simulate this approach by using very small squares.
-#       Not required at all, but save space by using adaptive LOD on quadtrees.
-#   A matrix of grid cells, containing whether they're covered or not. (Meh..)
-#       A graph of them would work better, especially for a
-#       surface with both concave and convex regions. Though, Alli said that
-#       there was a different approach that was better
 class InternalModel:
-    # Defines the size of an internal model square, in m, and in px.
+    # Defines the size of an internal model square in px.
     RES = 15
 
     GRID_WIDTH = int(PARAMS.SURFACE_DIMS[0] / RES)
     GRID_HEIGHT = int(PARAMS.SURFACE_DIMS[1] / RES)
 
     def __init__(self, position, angle):
-        self.phi_pred = 0
-        self.theta_pred = 0
-        self.psi_pred = 0
-
         # Start out with knowledge. Predict the rest
         self.prediction = {
             "psi": angle,
@@ -216,10 +199,8 @@ class InternalModel:
 
         self.color = "red"
 
-    # Tick the robot's predicted position and update
-    # the internal model with new
+    # Tick the robot's predicted position and update the internal model with new
     # spots cleaned using trapezoid rule.
-    # Assuming the acceleration is instantaneous is probably a source of drift
     def dead_reckon(self, acceleration):
 
         if self.last_measurement < 0:
@@ -236,6 +217,14 @@ class InternalModel:
         d_vy = 0
         d_v_psi = 0
 
+        # Calculate stuff for psi first
+        d_v_psi = d_time * acceleration["psi"]
+        self.prediction["v_psi"] += d_v_psi
+
+        d_psi = d_time * self.prediction["v_psi"] - (d_time * d_v_psi / 2)
+        self.prediction["psi"] += d_psi
+        self.prediction["psi"] %= 2 * math.pi
+
         psi = self.prediction["psi"]
         psi_sensor_frame = -psi
         world_accel = (acceleration["forward"] * math.cos(psi_sensor_frame) -
@@ -244,12 +233,6 @@ class InternalModel:
                        acceleration["lateral"] * math.cos(psi_sensor_frame))
 
         # Integrate twice for psi, x, and y.
-        d_v_psi = d_time * acceleration["psi"]
-        self.prediction["v_psi"] += d_v_psi
-
-        d_psi = d_time * self.prediction["v_psi"] - (d_time * d_v_psi / 2)
-        self.prediction["psi"] += d_psi
-        self.prediction["psi"] %= 2 * math.pi
 
         d_vx = d_time * world_accel[0]
         self.prediction["vx"] += d_vx
@@ -265,9 +248,6 @@ class InternalModel:
 
         self.last_measurement = Robot.world.simulation_time
 
-        # print(f'Model vx: {self.prediction["vx"]:.2f}')
-        # print(f'Model vy: {self.prediction["vy"]:.2f}')
-
         # print("Final: ", self.prediction)
 
     # Update the internal model based on the internal predicted position
@@ -275,7 +255,7 @@ class InternalModel:
         self.update_grid((self.prediction["x"],
                           self.prediction["y"]))
 
-    # only for testing. Still use position, but use the predicted position instead of ground-truth.
+    # only for testing. Use the ground-truth.
     def _update_ground_truth(self, owner):
         self.update_grid((owner.body.position.x,
                           owner.body.position.y))
