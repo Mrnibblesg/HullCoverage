@@ -156,11 +156,6 @@ class IMU(Sensor):
         accel_psi = (ang_vel - self.last_d_psi) / d_time
         self.last_d_psi = ang_vel
 
-        # We should determine x acceleration first, and THEN translate.
-        # There's a problem here, where the last accel_forward is in another frame.
-        # TODO There's an issue here if we're rotating. accel_forward
-        # and lateral will be skewed slightly. We need to take into account
-        # the rotation.
         accel_forward = (forward_vel - self.last_d_forward) / d_time
         self.last_d_forward = forward_vel
 
@@ -238,17 +233,7 @@ class InternalModel:
                        acceleration["forward"] * math.sin(psi_sensor_frame) +
                        acceleration["lateral"] * math.cos(psi_sensor_frame))
 
-        # TODO Changing psi will change the direction and magnitudes
-        # of the forward and lateral components!
-        # We can use the d_psi to determine which direction the last values
-        # were from. Use another linear map on
-        # d_psi and our predicted accelerations/velocities to account
-        # for previous values?
-        # BEFORE INCORPORATING THE LATERAL AND FORWARD ACCELERATION,
-        # apply the rotation and then ????
-        rot_coupling = ()
         # Integrate twice for psi, x, and y.
-
         d_vx = d_time * world_accel[0]
         self.prediction["vx"] += d_vx
 
