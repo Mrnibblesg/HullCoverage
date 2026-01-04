@@ -27,8 +27,10 @@ class Robot:
     # of path finding algorithm
 
     def tick(self):
+        self.IMU.react()
         self.planner()  # Set target parameters and control signals
         # self.communicate()
+
         self.move()  # Apply forces from motors
 
     def planner(self):
@@ -57,7 +59,6 @@ class Robot:
         self.body.apply_force_at_local_point(-force_vec * self.motor.rotation,
                                              -perp_offset)
 
-        self.IMU.react()
 
     def visualize(self, screen, pygame):
         self.internal_model.visualize(screen, pygame)
@@ -132,14 +133,16 @@ class IMU(Sensor):
 
         ang_vel = body.angular_velocity
         psi = body.angle
+        print("Real y vel: ", velocity[1])
 
         # Use the rotation matrix to translate world-frame velocity to
         # robot-frame components for forward and lateral velocity.
-        forward_vel = (velocity[0] * math.cos(psi)) - \
+        forward_vel = (velocity[0] * math.cos(psi)) + \
                       (velocity[1] * math.sin(psi))
-        lat_vel = (velocity[0] * math.sin(psi)) + \
+        lat_vel = (-velocity[0] * math.sin(psi)) + \
                   (velocity[1] * math.cos(psi))
-
+        if (Robot.world.simulation_time < 2):
+            print("Calc y vel: ", lat_vel)
         if self.last_measurement < 0:
             self.last_measurement = Robot.world.simulation_time
             self.last_d_forward = forward_vel
@@ -162,6 +165,8 @@ class IMU(Sensor):
         accel_lateral = (lat_vel - self.last_d_lateral) / d_time
         self.last_d_lateral = lat_vel
 
+        if (Robot.world.simulation_time < 2):
+            print("Calc y acc: ", accel_lateral)
         # print("Lateral Acceleration: ", accel_lateral)
         # print("Forward Acceleration: ", accel_forward)
         # print("Radial Acceleration: ", accel_psi)
