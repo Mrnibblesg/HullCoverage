@@ -42,6 +42,7 @@ def init():
 def loop():
     running = True
     step_interval = 1 / PARAMS.FRAME_RATE
+    physics_interval = step_interval / PARAMS.PHYSICS_STEPS_PER_FRAME
 
     while running:
 
@@ -49,13 +50,14 @@ def loop():
             if event.type == pygame.QUIT:
                 running = False
 
-        for i, r in enumerate(robots):
-            r.tick()
+        for s in range(PARAMS.PHYSICS_STEPS_PER_FRAME):
+            for i, r in enumerate(robots):
+                r.tick()
+            world.space.step(physics_interval)
+            world.simulation_time += physics_interval
 
-        world.space.step(step_interval)
         pygame.display.flip()
         world.clock.tick(PARAMS.FRAME_RATE)
-        world.simulation_time += step_interval
 
         if world.simulation_time >= PARAMS.RUN_TIME:
             running = False
