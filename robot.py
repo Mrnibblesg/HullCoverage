@@ -30,6 +30,7 @@ class Robot:
     def tick(self):
         self.IMU.react()
         self.planner()  # Set target parameters and control signals
+        print("Angle diff: ", self.body.angle - self.internal_model.prediction["psi"])
         # self.communicate()
 
         self.move()  # Apply forces from motors
@@ -136,7 +137,6 @@ class IMU(Sensor):
         body = self.owner.body
 
         velocity = body.velocity_at_world_point(body.position)
-        ang_vel = body.angular_velocity
         psi = body.angle
 
         # Use the rotation matrix to translate world-frame velocity to
@@ -209,7 +209,8 @@ class InternalModel:
         self.color = "red"
 
     # Dead reckon the current state using the previous state combined
-    # with current and previous IMU readings. Uses 4th order Runge-Kutta
+    # with current and previous IMU readings. Uses 4th order Runge-Kutta,
+    # RK4 has a better error order than trapezoidal
     def dead_reckon(self, curr_IMU, prev_IMU):
 
         if self.last_measurement < 0:
@@ -221,7 +222,7 @@ class InternalModel:
         # RK4
         # TODO clean up data storage, use numpy arrays
         def get_derivatives(state, imu):
-            psi_sensor_frame = -self.prediction["psi"]
+            psi_sensor_frame = -state[2]
             ax_w = imu["a_forward"] * math.cos(psi_sensor_frame) - imu["a_lateral"] * math.sin(psi_sensor_frame)
             ay_w = imu["a_forward"] * math.sin(psi_sensor_frame) + imu["a_lateral"] * math.cos(psi_sensor_frame)
 
@@ -254,7 +255,6 @@ class InternalModel:
         }
 
         self.last_measurement = Robot.world.simulation_time
-
 
     # Update the internal model based on the internal predicted position
     def update(self):
