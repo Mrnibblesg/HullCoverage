@@ -3,6 +3,7 @@ import pymunk
 from pymunk.vec2d import Vec2d
 import math
 from params import PARAMS
+import numpy as np
 
 
 class Robot:
@@ -34,7 +35,7 @@ class Robot:
         self.move()  # Apply forces from motors
 
     def planner(self):
-        self.internal_model.dead_reckon(self.IMU.acceleration)
+        self.internal_model.dead_reckon(self.IMU.values, self.IMU.last_values)
         self.internal_model.update()
         # self.internal_model._update_ground_truth(self)
 
@@ -114,14 +115,19 @@ class IMU(Sensor):
     def __init__(self, owner):
         super().__init__(owner)
         self.last_measurement = -1
-        self.last_d_psi = 0
         self.last_d_forward = 0
         self.last_d_lateral = 0
 
-        self.acceleration = {
-            "psi": 0,
-            "forward": 0,
-            "lateral": 0
+        self.values = {
+            "omega": 0,
+            "a_forward": 0,
+            "a_lateral": 0
+        }
+
+        self.last_values = {
+            "omega": 0,
+            "a_forward": 0,
+            "a_lateral": 0
         }
 
     # Detect changes in acceleration. We get to hook into ground truth values
@@ -130,10 +136,8 @@ class IMU(Sensor):
         body = self.owner.body
 
         velocity = body.velocity_at_world_point(body.position)
-
         ang_vel = body.angular_velocity
         psi = body.angle
-        print("Real y vel: ", velocity[1])
 
         # Use the rotation matrix to translate world-frame velocity to
         # robot-frame components for forward and lateral velocity.
@@ -141,23 +145,16 @@ class IMU(Sensor):
                       (velocity[1] * math.sin(psi))
         lat_vel = (-velocity[0] * math.sin(psi)) + \
                   (velocity[1] * math.cos(psi))
-        if (Robot.world.simulation_time < 2):
-            print("Calc y vel: ", lat_vel)
         if self.last_measurement < 0:
             self.last_measurement = Robot.world.simulation_time
             self.last_d_forward = forward_vel
             self.last_d_lateral = lat_vel
-            self.last_d_psi = ang_vel
             return
 
         d_time = Robot.world.simulation_time - self.last_measurement
 
         accel_forward = None
         accel_lateral = None
-        accel_psi = None
-
-        accel_psi = (ang_vel - self.last_d_psi) / d_time
-        self.last_d_psi = ang_vel
 
         accel_forward = (forward_vel - self.last_d_forward) / d_time
         self.last_d_forward = forward_vel
@@ -165,15 +162,14 @@ class IMU(Sensor):
         accel_lateral = (lat_vel - self.last_d_lateral) / d_time
         self.last_d_lateral = lat_vel
 
-        if (Robot.world.simulation_time < 2):
-            print("Calc y acc: ", accel_lateral)
-        # print("Lateral Acceleration: ", accel_lateral)
-        # print("Forward Acceleration: ", accel_forward)
-        # print("Radial Acceleration: ", accel_psi)
+        self.last_values["omega"] = self.values["omega"]
+        self.last_values["a_forward"] = self.values["a_forward"]
+        self.last_values["a_lateral"] = self.values["a_lateral"]
 
-        self.acceleration["psi"] = accel_psi
-        self.acceleration["forward"] = accel_forward
-        self.acceleration["lateral"] = accel_lateral
+        # IMU gyroscope directly measures angular velocity.
+        self.values["omega"] = body.angular_velocity
+        self.values["a_forward"] = accel_forward
+        self.values["a_lateral"] = accel_lateral
 
         self.last_measurement = Robot.world.simulation_time
 
@@ -195,7 +191,14 @@ class InternalModel:
             "x": position[0],
             "y": position[1],
 
-            "v_psi": 0,
+            "vx": 0,
+            "vy": 0
+        }
+        self.last_pred = {
+            "psi": angle,
+            "x": position[0],
+            "y": position[1],
+
             "vx": 0,
             "vy": 0
         }
@@ -205,9 +208,9 @@ class InternalModel:
 
         self.color = "red"
 
-    # Tick the robot's predicted position and update the internal model with new
-    # spots cleaned using trapezoid rule.
-    def dead_reckon(self, acceleration):
+    # Dead reckon the current state using the previous state combined
+    # with current and previous IMU readings. Uses 4th order Runge-Kutta
+    def dead_reckon(self, curr_IMU, prev_IMU):
 
         if self.last_measurement < 0:
             self.last_measurement = Robot.world.simulation_time
@@ -215,45 +218,43 @@ class InternalModel:
 
         d_time = Robot.world.simulation_time - self.last_measurement
 
-        dx = 0
-        dy = 0
-        d_psi = 0
+        # RK4
+        # TODO clean up data storage, use numpy arrays
+        def get_derivatives(state, imu):
+            psi_sensor_frame = -self.prediction["psi"]
+            ax_w = imu["a_forward"] * math.cos(psi_sensor_frame) - imu["a_lateral"] * math.sin(psi_sensor_frame)
+            ay_w = imu["a_forward"] * math.sin(psi_sensor_frame) + imu["a_lateral"] * math.cos(psi_sensor_frame)
 
-        d_vx = 0
-        d_vy = 0
-        d_v_psi = 0
+            return np.array([state[3], state[4], imu["omega"], ax_w, ay_w])
 
-        # Calculate stuff for psi first
-        d_v_psi = d_time * acceleration["psi"]
-        self.prediction["v_psi"] += d_v_psi
+        imu_midpoint = {
+            "omega": (curr_IMU["omega"] + prev_IMU["omega"]) / 2,
+            "a_forward": (curr_IMU["a_forward"] + prev_IMU["a_forward"]) / 2,
+            "a_lateral": (curr_IMU["a_lateral"] + prev_IMU["a_lateral"]) / 2
+        }
+        state_prev = np.array([self.prediction["x"],
+                               self.prediction["y"],
+                               self.prediction["psi"],
+                               self.prediction["vx"],
+                               self.prediction["vy"]])
 
-        d_psi = d_time * self.prediction["v_psi"] - (d_time * d_v_psi / 2)
-        self.prediction["psi"] += d_psi
-        self.prediction["psi"] %= 2 * math.pi
+        k1 = get_derivatives(state_prev, prev_IMU)
+        k2 = get_derivatives(state_prev + (d_time / 2) * k1, imu_midpoint)
+        k3 = get_derivatives(state_prev + (d_time / 2) * k2, imu_midpoint)
+        k4 = get_derivatives(state_prev + d_time * k3, curr_IMU)
 
-        psi = self.prediction["psi"]
-        psi_sensor_frame = -psi
-        world_accel = (acceleration["forward"] * math.cos(psi_sensor_frame) -
-                       acceleration["lateral"] * math.sin(psi_sensor_frame),
-                       acceleration["forward"] * math.sin(psi_sensor_frame) +
-                       acceleration["lateral"] * math.cos(psi_sensor_frame))
-
-        # Integrate twice for psi, x, and y.
-        d_vx = d_time * world_accel[0]
-        self.prediction["vx"] += d_vx
-
-        dx = d_time * self.prediction["vx"] - (d_time * d_vx / 2)
-        self.prediction["x"] += dx
-
-        d_vy = d_time * world_accel[1]
-        self.prediction["vy"] += d_vy
-
-        dy = d_time * self.prediction["vy"] - (d_time * d_vy / 2)
-        self.prediction["y"] += dy
+        self.last_pred = state_prev
+        prediction = state_prev + (d_time / 6) * (k1 + 2*k2 + 2*k3 + k4)
+        self.prediction = {
+            "x": prediction[0],
+            "y": prediction[1],
+            "psi": prediction[2],
+            "vx": prediction[3],
+            "vy": prediction[4]
+        }
 
         self.last_measurement = Robot.world.simulation_time
 
-        # print("Final: ", self.prediction)
 
     # Update the internal model based on the internal predicted position
     def update(self):
